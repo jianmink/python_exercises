@@ -34,7 +34,18 @@ class ZCS():
 class ZCS_LTE():
     '''
     zadoff chu sequence variation in LTE standard ts 36.211 v9
-    a(k) = exp -j(u*pi*(n)*(n+1)/Nzc)
+        a(n) = exp -j(u*pi*(n)*(n+1)/Nzc)
+    compare to standard ZCS formular a(k) = exp i(M*pi*(k)*(k+1)/Nzc), 
+    it is the conjugate.
+    
+    and, From the correlation calculation
+                                 __________
+            R(x) = sigma (a(k) * a(k+shift))
+          
+            ____         ----
+            R(X) = sigma (a(k) * a(k+shift))
+            k in range (0, nzc)
+            The correlation results are conjugate too.
     '''
     def __init__(self,nzc=5,u=1):
         self.nzc=nzc
