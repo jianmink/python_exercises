@@ -5,14 +5,15 @@
 '''
 import os
 import time
+import sys
 
 from multiprocessing import Process
 
 def run_test(case_no):
-    print "case_no start!"
+    print case_no, "start!"
     os.system("ls -lh&")
     time.sleep(5)
-    print "case_no done!"
+    print case_no, "done!"
 
 def process_log():
     print "process_log start!"
@@ -21,9 +22,9 @@ def process_log():
 
 def test_menu():
     print "-----------------------------"
-    print "(r) run  "
-    print "(l) log  "
-    print "(c) clean screen "
+    print "(r) run test       "
+    print "(l) log processing "
+    print "(c) clean screen   "
     print "(x) exit "
     print "-----------------------------"
 
@@ -34,15 +35,28 @@ def check_run_test_status(test_process):
         # check the test result
         # todo ...
     print "test completed"
-        
-def test_main():
+     
+def batch_test(case_no):
+    p=Process(target=run_test, args=(case_no,))
+    p.start()
+    
+    check_run_test_status(p)
+    time.sleep(1)
+
+   
+def interactive_test():
     while True:
         test_menu()
         choice=raw_input('> ')
         if choice == 'x':
             return 
         elif choice == 'r':
-            p=Process(target=run_test, args=('3020_10UEs',))
+            while True:
+                case_no=raw_input("case number: ")
+                if 'y'==raw_input('run test case'+case_no+'(y/n)? '):
+                    break
+                
+            p=Process(target=run_test, args=(case_no,))
             p.start()
             
             check_run_test_status(p)
@@ -58,5 +72,8 @@ def test_main():
     
 
 if __name__ == "__main__":
-    test_main()
+    if len(sys.argv) == 2:
+        batch_test(sys.argv[1])
+    else:
+        interactive_test()
     
