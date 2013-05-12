@@ -3,7 +3,6 @@
 
 import os
 
-
 def write_text_file():
     while True:
         filename=raw_input("please input the filename, (b) back to previous menu\n>")
