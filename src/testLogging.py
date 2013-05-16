@@ -20,7 +20,8 @@ class TestLogger(unittest.TestCase):
         logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
         logging.info(" simple logger.info")
         
-        
+      
+    @unittest.skip("...")
     def test_logger(self):
         # create logger
         logger = logging.getLogger('simple_example')
@@ -52,7 +53,7 @@ class TestLogger(unittest.TestCase):
         logging.config.fileConfig('logging.conf')
 
         # create logger
-        logger = logging.getLogger('logger_file')
+        logger = logging.getLogger('simpleExample')
         
         # 'application' code
         logger.debug('debug message')
