@@ -1,15 +1,14 @@
-
+#!/usr/bin/env python
 import time
 
-def gameOfLifeRule(now, numOfLiveNeighbours):
-    if now and (numOfLiveNeighbours == 2 or numOfLiveNeighbours == 3):
+def gameOfLifeRule(current_state, numOfLiveNeighbours):
+    if current_state and (numOfLiveNeighbours == 2 or numOfLiveNeighbours == 3):
         next_state=True
-    elif not now and numOfLiveNeighbours == 3:
+    elif not current_state and numOfLiveNeighbours == 3:
         next_state=True
     else:
         next_state=False
     
-    now=next_state
     return next_state
 
 
@@ -154,7 +153,7 @@ class Game():
     def run(self,times):
         self.printf(self.toMatrix())
         matrix=[]
-        for i in range(0,times):
+        for _ in range(0,times):
             self.group.next()
             matrix=self.toMatrix()
             self.printf(matrix)

@@ -43,34 +43,34 @@ def batch_test(case_no):
     check_run_test_status(p)
     time.sleep(1)
 
-   
+def run_something():
+    while True:
+        case_no = raw_input("case number: ")
+        if 'y' == raw_input('run test case' + case_no + '(y/n)? '):
+            break
+                
+    p = Process(target=run_test, args=(case_no,))
+    p.start()
+    check_run_test_status(p)
+    time.sleep(1)
+
+CMDS={'l':process_log, 'r': run_something}
+
 def interactive_test():
     while True:
         test_menu()
         choice=raw_input('> ')
-        if choice == 'x':
+        
+        if choice not in 'xrlc':
+            print "unknow choice:%s" %(choice)
+        elif choice == 'x':
             return 
-        elif choice == 'r':
-            while True:
-                case_no=raw_input("case number: ")
-                if 'y'==raw_input('run test case'+case_no+'(y/n)? '):
-                    break
-                
-            p=Process(target=run_test, args=(case_no,))
-            p.start()
-            
-            check_run_test_status(p)
-            
-            time.sleep(1)
-        elif choice == 'l':
-            process_log()
         elif choice == 'c':
             os.system('clear')
-        else:
-            pass
-        
-    
+            
+        CMDS[choice]()
 
+        
 if __name__ == "__main__":
     if len(sys.argv) == 2:
         batch_test(sys.argv[1])
