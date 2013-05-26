@@ -59,16 +59,19 @@ CMDS={'l':process_log, 'r': run_something}
 def interactive_test():
     while True:
         test_menu()
-        choice=raw_input('> ')
+        try:
+            choice=raw_input('> ')
+        except (EOFError, KeyboardInterrupt, IndexError):
+            choice = 'x'
         
         if choice not in 'xrlc':
-            print "unknow choice:%s" %(choice)
+            print "invalid choice:%s, try again!" %(choice)
         elif choice == 'x':
             return 
         elif choice == 'c':
             os.system('clear')
-            
-        CMDS[choice]()
+        else:    
+            CMDS[choice]()
 
         
 if __name__ == "__main__":
