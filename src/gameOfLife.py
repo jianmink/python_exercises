@@ -1,31 +1,30 @@
 #!/usr/bin/env python
 import time
+import os
 
-def gameOfLifeRule(current_state, numOfLiveNeighbours):
-    if current_state and (numOfLiveNeighbours == 2 or numOfLiveNeighbours == 3):
-        next_state=True
-    elif not current_state and numOfLiveNeighbours == 3:
-        next_state=True
+def game_of_Life_rules(state, num_live_neighbours):
+    if state and (num_live_neighbours == 2 or num_live_neighbours == 3):
+        state=True
+    elif not state and num_live_neighbours == 3:
+        state=True
     else:
-        next_state=False
+        state=False
     
-    return next_state
+    return state
 
 
 class Person():
-    "a person"
-    
     def __init__(self):
         """constructor"""
         self.state = True
         self.liveNB=0
         self.position=(0,0)
     
-    def setLiveNB(self, liveNB):
+    def set_num_live_neighbours(self, liveNB):
         self.liveNB=liveNB
         return self
     
-    def getLiveNB(self):
+    def get_num_live_neighbours(self):
         return self.liveNB
     
     def live(self):
@@ -36,102 +35,90 @@ class Person():
         self.state=False
         return self
     
-    def next(self):
-        self.state=gameOfLifeRule(self.state, self.liveNB)
+    def next_round(self):
+        self.state=game_of_Life_rules(self.state, self.liveNB)
         return self.state
     
-    def setPosition(self, x,y):
+    #coordinate
+    def set_x_y(self, x,y):
         self.position=(x,y)
         return self
 
-    def getPosition(self):
+    def get_x_y(self):
         return self.position
 
 
+neighbourhood=((-1,-1),(-1,0),(-1,1), (0,-1),(0,1), (1,-1),(1,0),(1,1))
 class Group():
     """ a group of live person"""
     
     def __init__(self): 
         """constructor"""
-        self.liveMembers={}
+        self.live_members={}
         pass
         
     
-    def getLiveMember(self):
-        if None==len(self.liveMembers):
-            return 0
-        else:
-            return len(self.liveMembers)
-    
-    def add(self, member):
-        self.liveMembers[member.position]=member
-        self.calculateLiveNBOfAllLiveMembers()
+    def get_num_live_member(self):
+        return 0 if self.live_members=={} else len(self.live_members)
+     
+    def add_live_member(self, member):
+        self.live_members[member.position]=member
+        self.set_live_neighbours_4_all_live_members()
         pass
     
-    def get(self,x,y):
-        if self.liveMembers.has_key((x,y)):
-            return self.liveMembers[(x,y)]
+    def get_person(self,x,y):
+        if self.live_members.has_key((x,y)):
+            return self.live_members[(x,y)]
         else:
-            zombie=Person().die().setPosition(x,y)
-            self.calculateLiveNB(zombie)
+            zombie=Person().die().set_x_y(x,y)
+            self.set_his_live_neighbours(zombie)
             return zombie
     
     def clean(self):
-        self.liveMembers={}
+        self.live_members={}
         
-    def calculateLiveNBOfAllLiveMembers(self):
-        for key in self.liveMembers:
-            person=self.liveMembers[key]
-            person.setLiveNB(self.countNB(key))
+    def set_live_neighbours_4_all_live_members(self):
+        for key in self.live_members:
+            person=self.live_members[key]
+            person.set_num_live_neighbours(self.count_live_neighbours(key))
             
-    def calculateLiveNB(self,him):
-        liveNB=self.countNB(him.getPosition())
-        him.setLiveNB(liveNB)
+    def set_his_live_neighbours(self,him):
+        liveNB=self.count_live_neighbours(him.get_x_y())
+        him.set_num_live_neighbours(liveNB)
         pass
     
-    def countNB(self,position):
-        x = position[0]
-        y = position[1]
-        liveNB=0
-        for i in range(-1,2):
-            for j in range(-1,2):
-                if self.liveMembers.has_key((x+i,y+j)):
-                    liveNB=liveNB+1
-        if self.liveMembers.has_key((x,y)):
-            liveNB=liveNB-1
-        return liveNB
+    def count_live_neighbours(self,(x,y)):
+        count=0
+        for (i,j) in neighbourhood:
+            if (x+i,y+j) in self.live_members:
+                count+=1
+        return count
      
-    def next(self):
-        # update the live member's next generation state
+    def next_round(self):
+        # update the live member's next_round generation state
         revives={}
-        for key in self.liveMembers:
-            person=self.liveMembers[key]
-            person.next()
-            x=key[0]
-            y=key[1]
-            # revive the person follow rule 4
-            for i in range(-1,2):
-                for j in range(-1,2):
-                    if not self.liveMembers.has_key((x+i,y+j)):
-                        zombie=self.get(x+i,y+j)
-                        if zombie.next():
-                            revives[zombie.getPosition()]=zombie
+        for (x,y) in self.live_members:
+            self.live_members[(x,y)].next_round()
+            # revive, rule 4
+            for (i,j) in neighbourhood:
+                if (x+i,y+j) not in self.live_members:
+                    zombie=self.get_person(x+i,y+j)
+                    if zombie.next_round():
+                        revives[zombie.get_x_y()]=zombie
                                     
         # remove the member to be die from the live member map
-        oldLiveMembers=self.liveMembers
-        self.liveMembers={}
-        for key in oldLiveMembers:
-            if oldLiveMembers[key].state==True:
-                self.liveMembers[key]=oldLiveMembers[key]
+        copy_= self.live_members.copy()
+        for key in copy_:
+            if not copy_[key].state:
+                self.live_members.pop(key)
         
-        # add revives into liveMembers
-        self.liveMembers.update(revives)
+        # add_live_member revives into live_members
+        self.live_members.update(revives)
         
         # update every live members's neighourship in the new generation
-        self.calculateLiveNBOfAllLiveMembers()
+        self.set_live_neighbours_4_all_live_members()
         
    
-import os     
         
 class Game():
     """ game """
@@ -140,33 +127,30 @@ class Game():
         self.board=(x,y)
     
     def init(self,matrix):
-        x=0
-        for item in matrix:
-            y=0
-            for sub_item in item:
-#                 print '(%d,%d)' %(x,y),sub_item,
+        for x, item in enumerate(matrix):
+            for y, sub_item in enumerate(item):
                 if sub_item == 1:
-                    self.group.add(Person().setPosition(x,y))
-                y=y+1
-            x=x+1
+                    self.group.add_live_member(Person().set_x_y(x,y))
     
-    def run(self,times):
-        self.printf(self.toMatrix())
+    def run(self,times,display=True):
+        if display:
+            self.printf(self.to_matrix())
         matrix=[]
         for _ in range(0,times):
-            self.group.next()
-            matrix=self.toMatrix()
-            self.printf(matrix)
-            time.sleep(1)
+            self.group.next_round()
+            matrix=self.to_matrix()
+            if display:
+                self.printf(matrix)
+                time.sleep(0.5)
         
         return matrix
         
-    def toMatrix(self):
+    def to_matrix(self):
         board=[]
         for i in range(0,self.board[0]):
             line=[]
             for j in range(0,self.board[1]):
-                if self.group.liveMembers.has_key((i,j)):
+                if self.group.live_members.has_key((i,j)):
                     line.append(1)
                 else:
                     line.append(0)
@@ -174,19 +158,25 @@ class Game():
                     
         return board
     
+    def to_string(self,matrix):
+        str_=''
+        for item in matrix:
+            str_+= "   "
+            for subitem in item:
+                if subitem == 1:
+                    str_+= '* '
+                else:
+                    str_+= '  '
+            str_+='\n'
+        return str_
+        
+    
     def printf(self, matrix):
         os.system("clear")
         print 
         print '*'*self.board[1]+' game of life '+'*'*self.board[1]
         print 
-        for item in matrix:
-            print "   ",
-            for subitem in item:
-                if subitem == 1:
-                    print '*',
-                else:
-                    print ' ',
-            print
+        print self.to_string(matrix),
         print
         print '*'*self.board[1]+' game of life '+'*'*self.board[1]
         

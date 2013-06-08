@@ -64,7 +64,7 @@ def interactive_test():
         except (EOFError, KeyboardInterrupt, IndexError):
             choice = 'x'
         
-        if choice not in 'xrlc':
+        if choice =='' or choice not in 'xrlc':
             print "invalid choice:%s, try again!" %(choice)
         elif choice == 'x':
             return 
