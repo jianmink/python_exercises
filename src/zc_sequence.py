@@ -72,8 +72,12 @@ def acorr(a,b):
     count_I=0
     count_Q=0
     for i in range(0, len(a)):
+        print " %e, %e" %((a[i][0]*b[i][0]+a[i][1]*b[i][1]),
+                          (a[i][0]*b[i][1]-a[i][1]*b[i][0]))
         count_I+=a[i][0]*b[i][0]+a[i][1]*b[i][1]
         count_Q-=a[i][0]*b[i][1]-a[i][1]*b[i][0]
+        print "%e,%e -- %e, %e " %(a[i][0], a[i][1], b[i][0], b[i][1])
+        print "step %d: I=%e, Q=%e" %(i, count_I, count_Q)
     print "acorr: ",count_I, count_Q
     return count_I, count_Q 
                 
