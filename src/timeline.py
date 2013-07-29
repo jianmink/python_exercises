@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from matplotlib import pyplot, mpl
+from lte_re import *
 
 
 background_color_set= ( [x / 256 for x in (192., 227., 207.)]
@@ -34,6 +35,11 @@ def add_end_ticker(bounds, colors, start, duration, front_color):
     
     base = int(start)
     end = start + duration
+    
+    if base <0 or base > 10:
+        print "Warning: time line data %f is out of range" %(start)
+        return
+
     previous_ticker = bounds.index(start)+1
     
     if end >= bounds[previous_ticker]:
@@ -64,10 +70,16 @@ def add_end_ticker(bounds, colors, start, duration, front_color):
 def add_begin_ticker(bounds, colors, start, end, front_color):
     
     base = int(start)
+    
+    if base <0 or base > 10:
+        print "Warning: time line data %f is out of range" %(start)
+        return
+    
     if start in bounds:
         return
     
     index = bounds.index(base)
+    
     while 1:
         if bounds[index + 1] > start:
             break
@@ -84,6 +96,9 @@ def add_time_line(bounds, colors, task_times, front_color):
         start = each[0]
         end = each[1]
         duration = end -start
+        
+        if start <0 or start>10:
+            continue
          
         while abs(duration)> 1e-5 :
             if abs(start)> 1e-5 and not is_begin_ticker_done:
@@ -179,9 +194,31 @@ def draw_gpp_task_view(tasks_set):
 
     pyplot.show() 
     
+def get_gpp_run_data(sfn):
+    global task_time_map
+    tasknames={"dl", "rach", "pucch", "srs", "pusch" }
+    for each in tasknames:
+        task_time_map[each]= []
+    
+    set_filename('run.log')
+    
+    frame_base=get_frame_start_time()/1000
+    
+    for i in range(10):
+        for each in tasknames:
+            rtn=get_task_start_and_end_time(each, *get_packet_fn(each,sfn,i))
+            if rtn is not None:
+                task_time_map[each].append((rtn[0]/1000-frame_base,rtn[1]/1000-frame_base))
+        
+    print task_time_map  
+                                
+    
+    
 if __name__ == '__main__':
+    get_gpp_run_data(1124)
     draw_gpp_task_view((('dl', 'rach',),
                     ('pucch', 'srs'),
                     ('pusch',)
                     ))
+#     draw_gpp_task_view((('rach',),))
     
