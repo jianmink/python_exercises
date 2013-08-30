@@ -212,7 +212,25 @@ def get_gpp_run_data(sfn):
         
     print task_time_map  
                                 
+def get_gpp_run_data_2(sfn):
+    global task_time_map
+    tasknames={"dl", "rach", "pucch", "srs", "pusch" }
+    for each in tasknames:
+        task_time_map[each]= []
     
+    set_filename('run.log')
+    frame_base=get_frame_start_time()/1000
+    
+    log=get_log_of_sfn("run.log",sfn)
+    
+    for i in range(10):
+        for each in tasknames:
+            rtn=get_task_start_and_end_time_2(log,each, *get_packet_fn(each,sfn,i))
+            if rtn is not None:
+                task_time_map[each].append((rtn[0]/1000-frame_base,rtn[1]/1000-frame_base))
+        
+    print task_time_map  
+        
     
 if __name__ == '__main__':
     get_gpp_run_data(1124)

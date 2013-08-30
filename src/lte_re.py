@@ -32,7 +32,7 @@ def get_frame_start_time():
         for eachline in f:
             m = re.search(pattern, eachline)
             if m is not None:
-                print m.groups()
+#                 print m.groups()
                 return float(m.groups()[0])/CPU_FREQUENCY_IN_MHZ
     
 
@@ -42,10 +42,97 @@ def get_task_start_and_end_time(task_name,fn,sfn):
         for eachline in f:
             m =re.search(pattern, eachline)
             if m is not None:
-                print m.groups()
+#                 print m.groups()
                 start_time=m.groups()[0]
                 end_time=m.groups()[1]
                 return float(start_time)/CPU_FREQUENCY_IN_MHZ, float(end_time)/CPU_FREQUENCY_IN_MHZ
+
+def get_task_start_and_end_time_2(logs,task_name,fn,sfn):
+    pattern = "%s: (\d+) - (\d+), sfn=%d, subframe=%d" %(task_name_map[task_name],fn,sfn)
+    for eachline in logs:
+        m =re.search(pattern, eachline)
+        if m is not None:
+            start_time=m.groups()[0]
+            end_time=m.groups()[1]
+            return float(start_time)/CPU_FREQUENCY_IN_MHZ, float(end_time)/CPU_FREQUENCY_IN_MHZ
+
+def get_log_of_sfn(log_filename,sfn):
+    ret=[]
+    pattern = ".+, sfn=%d,.+[\s]*" %(sfn)
+    print pattern
+    with open(log_filename, 'r') as f:
+        for eachline in f:
+            m =re.match(pattern, eachline)
+            if m is not None:
+                print m.group()
+                ret.append(m.group())
+    return ret
+
+
+
+class time_logs(object):
+    NUM_LINES_PER_RECORDS=1000
+    def __init__(self):
+        self.start_line_num=0
+        self.bulk=None
+        self.block=[]
+        self.sfn=0
+        
+    def open(self,filename):
+        self.f=open(filename, 'r')
+    
+    def next_bulk(self):
+        self.bulk=[]
+        for i,each in enumerate(self.f):
+            if i<self.start_line_num:
+                continue
+            elif i==self.start_line_num+self.NUM_LINES_PER_RECORDS+2:
+                self.start_line_num=i
+                break;
+                
+            else:
+                self.bulk.append(each)
+        raise EOFError
+    
+    
+    def next_sfn_block(self):
+        pattern = 'Subframe_Boundary: (\d+), sfn=(\d+), subframe=0'
+        
+        try:
+            if self.bulk is None:
+                self.next_bulk()
+        except EOFError: 
+            print "End of file"
+            raise EOFError
+        
+        
+        else:
+            flag=0
+            start_time=0
+            for eachline in self.bulk:
+                m = re.search(pattern, eachline)
+                if m is not None:
+                    if flag==1:
+                        print "end block"
+                        flag=0
+                        return self.block
+                    else:
+                        print "start block"
+                        flag=1
+                        if ((self.sfn+1)%4096) <= m.groups()[1]:
+                            self.sfn =  m.groups()[1]
+                            start_time=float(m.groups()[0])/CPU_FREQUENCY_IN_MHZ
+                            flag=1
+                        else:
+                            continue
+                else:
+                    pattern_task = ": (\d+) - (\d+), sfn=%d, subframe=%d" %(task_name_map[task_name],self.sfn)
+                    
+            else:
+                self.bulk=None
+                    
+         
+    
         
 def get_packet_fn(packet_type, sfn_ai, subframe_ai):
     max_sfn=4096

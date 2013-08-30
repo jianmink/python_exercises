@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from socket import *
+
 import unittest
 
 class TestRE(unittest.TestCase):
