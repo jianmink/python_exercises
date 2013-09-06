@@ -33,58 +33,6 @@ def my_hash_plus(cubiers):
     return tuple(hash_v)
 
 
-def turn_around_x_axis(x, cubiers):
-    new_cubiers=cubiers
-    new_cubiers[(x,0,0)]= cubiers[(x,0,1)] 
-    new_cubiers[(x,1,0)]= cubiers[(x,0,0)] 
-    new_cubiers[(x,1,1)]= cubiers[(x,1,0)] 
-    new_cubiers[(x,0,1)]= cubiers[(x,1,1)]
-    return new_cubiers 
-
-def turn_around_x_axis_i(x, cubiers):
-# inverse 
-    new_cubiers=cubiers
-    new_cubiers[(x,0,1)]= cubiers[(x,0,0)] 
-    new_cubiers[(x,0,0)]= cubiers[(x,1,0)] 
-    new_cubiers[(x,1,0)]= cubiers[(x,1,1)] 
-    new_cubiers[(x,1,1)]= cubiers[(x,0,1)]
-    return new_cubiers 
-    
-    
-def turn_around_y_axis(y, cubiers):
-    new_cubiers=cubiers
-    new_cubiers[(0,y,0)]= cubiers[(0,y,1)] 
-    new_cubiers[(1,y,0)]= cubiers[(0,y,0)] 
-    new_cubiers[(1,y,1)]= cubiers[(1,y,0)] 
-    new_cubiers[(0,y,1)]= cubiers[(1,y,1)]
-    return new_cubiers 
-
-def turn_around_y_axis_i(y, cubiers):
-    new_cubiers=cubiers
-    new_cubiers[(0,y,1)]= cubiers[(0,y,0)] 
-    new_cubiers[(0,y,0)]= cubiers[(1,y,0)] 
-    new_cubiers[(1,y,0)]= cubiers[(1,y,1)] 
-    new_cubiers[(1,y,1)]= cubiers[(0,y,1)]
-    return new_cubiers 
-    
-def turn_around_z_axis(z, cubiers):
-    new_cubiers=cubiers
-    new_cubiers[(0,0,z)]= cubiers[(1,0,z)] 
-    new_cubiers[(1,0,z)]= cubiers[(1,1,z)] 
-    new_cubiers[(1,1,z)]= cubiers[(0,1,z)] 
-    new_cubiers[(0,1,z)]= cubiers[(0,0,z)]
-    return new_cubiers 
-    
-def turn_around_z_axis_i(z, cubiers):
-    new_cubiers=cubiers
-    new_cubiers[(1,0,z)]= cubiers[(0,0,z)] 
-    new_cubiers[(1,1,z)]= cubiers[(1,0,z)] 
-    new_cubiers[(0,1,z)]= cubiers[(1,1,z)] 
-    new_cubiers[(0,0,z)]= cubiers[(0,1,z)]
-    return new_cubiers 
-
-
-
 class Cubier(object):
     def __init__(self, p=(0,0,0), c=(0,1,2)):
         self.p = p          # position represented with axis(x, y, z)
@@ -127,6 +75,13 @@ class Vertex(object):
     def __str__(self):
         return "Vertex str() todo!"
     
+    def __repr__(self):
+        the_str=""
+        for each in self.cubiers:
+            the_str+= str(each)
+            the_str+= repr(self.cubiers[each])
+        return the_str
+        
     def __hash__(self):
 #        hash_v = []
         h = 0
@@ -146,9 +101,9 @@ class Vertex(object):
     
     def turn_around_x_axis(self,x):
         new_cubiers=self.cubiers.copy()
-        new_cubiers[(x,0,0)]= self.cubiers[(x,0,1)] 
+        new_cubiers[(x,0,0)]= self.cubiers[(x,0,1)]
         new_cubiers[(x,1,0)]= self.cubiers[(x,0,0)] 
-        new_cubiers[(x,1,1)]= self.cubiers[(x,1,0)] 
+        new_cubiers[(x,1,1)]= self.cubiers[(x,1,0)]
         new_cubiers[(x,0,1)]= self.cubiers[(x,1,1)]
         return Vertex(new_cubiers) 
     
@@ -162,37 +117,37 @@ class Vertex(object):
         return Vertex(new_cubiers) 
         
         
-#    def turn_around_y_axis(self,y, cubiers):
-#        new_cubiers=cubiers
-#        new_cubiers[(0,y,0)]= cubiers[(0,y,1)] 
-#        new_cubiers[(1,y,0)]= cubiers[(0,y,0)] 
-#        new_cubiers[(1,y,1)]= cubiers[(1,y,0)] 
-#        new_cubiers[(0,y,1)]= cubiers[(1,y,1)]
-#        return new_cubiers 
-#    
-#    def turn_around_y_axis_i(y, cubiers):
-#        new_cubiers=cubiers
-#        new_cubiers[(0,y,1)]= cubiers[(0,y,0)] 
-#        new_cubiers[(0,y,0)]= cubiers[(1,y,0)] 
-#        new_cubiers[(1,y,0)]= cubiers[(1,y,1)] 
-#        new_cubiers[(1,y,1)]= cubiers[(0,y,1)]
-#        return new_cubiers 
-#        
-#    def turn_around_z_axis(z, cubiers):
-#        new_cubiers=cubiers
-#        new_cubiers[(0,0,z)]= cubiers[(1,0,z)] 
-#        new_cubiers[(1,0,z)]= cubiers[(1,1,z)] 
-#        new_cubiers[(1,1,z)]= cubiers[(0,1,z)] 
-#        new_cubiers[(0,1,z)]= cubiers[(0,0,z)]
-#        return new_cubiers 
-#        
-#    def turn_around_z_axis_i(z, cubiers):
-#        new_cubiers=cubiers
-#        new_cubiers[(1,0,z)]= cubiers[(0,0,z)] 
-#        new_cubiers[(1,1,z)]= cubiers[(1,0,z)] 
-#        new_cubiers[(0,1,z)]= cubiers[(1,1,z)] 
-#        new_cubiers[(0,0,z)]= cubiers[(0,1,z)]
-#        return new_cubiers  
+    def turn_around_y_axis(self,y):
+        new_cubiers=self.cubiers.copy()
+        new_cubiers[(0,y,0)]= self.cubiers[(0,y,1)] 
+        new_cubiers[(1,y,0)]= self.cubiers[(0,y,0)] 
+        new_cubiers[(1,y,1)]= self.cubiers[(1,y,0)] 
+        new_cubiers[(0,y,1)]= self.cubiers[(1,y,1)]
+        return Vertex(new_cubiers) 
+    
+    def turn_around_y_axis_i(self,y):
+        new_cubiers=self.cubiers.copy()
+        new_cubiers[(0,y,1)]= self.cubiers[(0,y,0)] 
+        new_cubiers[(0,y,0)]= self.cubiers[(1,y,0)] 
+        new_cubiers[(1,y,0)]= self.cubiers[(1,y,1)] 
+        new_cubiers[(1,y,1)]= self.cubiers[(0,y,1)]
+        return Vertex(new_cubiers) 
+        
+    def turn_around_z_axis(self,z):
+        new_cubiers=self.cubiers.copy()
+        new_cubiers[(0,0,z)]= self.cubiers[(1,0,z)] 
+        new_cubiers[(1,0,z)]= self.cubiers[(1,1,z)] 
+        new_cubiers[(1,1,z)]= self.cubiers[(0,1,z)] 
+        new_cubiers[(0,1,z)]= self.cubiers[(0,0,z)]
+        return Vertex(new_cubiers) 
+        
+    def turn_around_z_axis_i(self,z):
+        new_cubiers=self.cubiers.copy()
+        new_cubiers[(1,0,z)]= self.cubiers[(0,0,z)] 
+        new_cubiers[(1,1,z)]= self.cubiers[(1,0,z)] 
+        new_cubiers[(0,1,z)]= self.cubiers[(1,1,z)] 
+        new_cubiers[(0,0,z)]= self.cubiers[(0,1,z)]
+        return Vertex(new_cubiers)  
     
 class TestVertex(unittest.TestCase):
     def test_eq(self):
@@ -224,25 +179,25 @@ class PocketCube(object):
 #        self.create_BFS_search_tree()                      
                        
         
-    def search(self, node):
+    def search(self, vertex):
         children=[]
         adj = []
-        for x in range(0,2):
-            adj.append(node.turn_around_x_axis(x))
-            adj.append(node.turn_around_x_axis_i(x))
-#        for y in range(0,2):
-#            adj.append(turn_around_y_axis(y, node))
-#            adj.append(turn_around_y_axis_i(y, node))
-#        for z in range(0,2):
-#            adj.append(turn_around_z_axis(z, node))
-#            adj.append(turn_around_z_axis_i(z, node))
-            
+        for x in range(0,1):
+            adj.append(vertex.turn_around_x_axis(x))
+            adj.append(vertex.turn_around_x_axis_i(x))
+#         for y in range(0,2):
+#             adj.append(vertex.turn_around_y_axis(y))
+#             adj.append(vertex.turn_around_y_axis_i(y))
+#         for z in range(0,2):
+#             adj.append(vertex.turn_around_z_axis(z))
+#             adj.append(vertex.turn_around_z_axis_i(z))
         
+        print "adj: ",adj
         for each in adj:
             if each not in self.level:
-                self.level[each]= self.level[node]+1
+                self.level[each]= self.level[vertex]+1
                 children.append(each)
-                self.parent[each]=node
+                self.parent[each]=vertex
         return children 
 
     def BFS_search(self,s):
@@ -267,22 +222,9 @@ class PocketCube(object):
     
 
 class TestCube(unittest.TestCase):
-#    def test_cube_n_0(self):
-#        cube=PocketCube(n=0)
-#        self.assertEqual(0,cube.get_num_vertex())
-#        self.assertEqual(0,cube.get_num_edge())
-#
-#    def test_cube_n_1(self):
-#        cube=PocketCube(n=1)
-#        self.assertEqual(1,cube.get_num_vertex())
-#        self.assertEqual(0,cube.get_num_edge())
-        
     def test_cube_n_2(self):
         cube=PocketCube(n=2)
         cube.create_BFS_search_tree()
-#        ref= reduce(lambda a,b : a*b, range(1,9)) * pow(3,7) /24
-#        self.assertEqual(ref,cube.get_num_vertex())
-#        self.assertEqual(0,cube.get_num_edge())
 
 
 class BFS(object):

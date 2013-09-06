@@ -3,40 +3,29 @@
 from matplotlib import pyplot, mpl
 from lte_re import *
 
+import logging 
+import logging.config
 
-background_color_set= ( [x / 256 for x in (192., 227., 207.)]
+# create logger
+logging.config.fileConfig('logging.conf')
+logger = logging.getLogger('simpleExample')
+
+background_colors= ( [x / 256 for x in (192., 227., 207.)]
                         ,[x / 256 for x in (51., 168., 159.)])
-overlap_color = 'red'
 
-#todo: It needs to support more than 3 task_time_map in one colorbar. 
-front_color_set = ([x / 256 for x in(130., 219., 113.)],
-                  [x / 256 for x in (9., 88., 101.)],
-                  [x / 256 for x in (36., 46., 55.)]
-                   )
+front_colors = ()
+tasks_color_map = {}
+tasks_time_map =  {}
 
+START_INDEX=-1
+END_INDEX=10
 
-
-task_color_map = {'dl':  front_color_set[0 % len(front_color_set)],
-                 'rach':front_color_set[1 % len(front_color_set)],
-                 'srs': front_color_set[2 % len(front_color_set)],
-                 'pucch': front_color_set[3 % len(front_color_set)],
-                 'pusch': front_color_set[4 % len(front_color_set)]
-                 }
-
-
-
-task_time_map = {'dl':  ((0.,.7), (4., 4.5), (5.0, 5.8), (9.0, 9.4)),
-       'rach': ((3.1, 4.3),),
-       'pusch': ((2.0, 2.8), (3.2, 4.5), (7.0, 7.8), (8.0, 8.7)),
-       'srs': ((3.5, 3.9),),
-       'pucch':((2.1, 2.5), (3.1, 3.5), (7.2, 7.6), (8.1, 8.5))}
-
-def add_end_ticker(bounds, colors, start, duration, front_color):
+def add_end_ticker(bounds, colors, start, duration, front_color, overlap_color='r'):
     
     base = int(start)
     end = start + duration
     
-    if base <0 or base > 10:
+    if base <START_INDEX or base > END_INDEX:
         print "Warning: time line data %f is out of range" %(start)
         return
 
@@ -46,7 +35,7 @@ def add_end_ticker(bounds, colors, start, duration, front_color):
         new_ticker_value = bounds[previous_ticker]
         
         new_ticker_color= overlap_color
-        if colors[previous_ticker-1] in background_color_set:
+        if colors[previous_ticker-1] in background_colors:
             new_ticker_color= front_color
         
         colors[previous_ticker-1]=new_ticker_color              
@@ -55,7 +44,7 @@ def add_end_ticker(bounds, colors, start, duration, front_color):
         bounds.insert(previous_ticker, end)
         
         new_ticker_color= overlap_color
-        if colors[previous_ticker-1] in background_color_set:
+        if colors[previous_ticker-1] in background_colors:
             new_ticker_color= front_color
                     
         colors.insert(previous_ticker-1, new_ticker_color)
@@ -68,10 +57,9 @@ def add_end_ticker(bounds, colors, start, duration, front_color):
 
 
 def add_begin_ticker(bounds, colors, start, end, front_color):
-    
     base = int(start)
     
-    if base <0 or base > 10:
+    if base <START_INDEX or base > END_INDEX:
         print "Warning: time line data %f is out of range" %(start)
         return
     
@@ -88,16 +76,14 @@ def add_begin_ticker(bounds, colors, start, end, front_color):
     bounds.insert(index + 1, start)
     colors.insert(index, colors[index]) 
 
-
-
-def add_time_line(bounds, colors, task_times, front_color):
+def add_task(bounds, colors, task_times, front_color, overlap_color='r'):
     for each in task_times:
         is_begin_ticker_done = False
         start = each[0]
         end = each[1]
         duration = end -start
         
-        if start <0 or start>10:
+        if start <START_INDEX  or start>END_INDEX:
             continue
          
         while abs(duration)> 1e-5 :
@@ -106,10 +92,23 @@ def add_time_line(bounds, colors, task_times, front_color):
             
             is_begin_ticker_done = True
 
-            start, duration = add_end_ticker(bounds, colors, start, duration, front_color)
+            start, duration = add_end_ticker(bounds, colors, start, duration, front_color, overlap_color)
 
 
-def create_colorbar(task_times, color_map=('blue', 'black', 'red'), frames=10):
+import matplotlib.colors as mcolors
+
+def get_mixed_color(color_map):
+    c = mcolors.ColorConverter().to_rgb    
+    new_color=[0., 0., 0.]   
+
+    mix_func=lambda x, y: x+y
+    for each in color_map:
+        new_color=map(mix_func, new_color, c(each))
+
+    return [each/len(color_map) for each in new_color]
+
+
+def create_data_set(task_times, color_map=('blue', 'black', 'red'), frames=END_INDEX):
     # (2.,2.7))  
     #  start position, end position 
     colors = []
@@ -120,20 +119,20 @@ def create_colorbar(task_times, color_map=('blue', 'black', 'red'), frames=10):
     
 
     for item in range(frames):
-        colors.append(background_color_set[item % 2])
-       
-
-    for i, task in enumerate(task_times):    
-        add_time_line(bounds, colors, task, color_map[i])
+        colors.append(background_colors[item % 2])
+                   
+    logger.debug("len(color_map) %d" %(len(color_map)))
+    
+    for i, each_task in enumerate(task_times):    
+        add_task(bounds, colors, each_task, color_map[i],get_mixed_color(color_map))
       
-
     return bounds, colors
 
 def add_colorbar(ax, tasks):
-    task_times = [task_time_map[x] for x in tasks]
-    color_map = [task_color_map[x] for x in tasks]
+    task_times= [tasks_time_map[x]  for x in tasks]
+    color_map = [tasks_color_map[x] for x in tasks]
     
-    bounds, colors = create_colorbar(task_times, color_map)
+    bounds, colors = create_data_set(task_times, color_map)
     cmap = mpl.colors.ListedColormap(colors)
 
 
@@ -161,82 +160,114 @@ def add_legend(fig, (left, bottom, width, height), text, color='r'):
                                          spacing='proportional',
                                          orientation='horizontal',
                                          extend='min',
-                                         drawedges=True
-                                         )
+                                         drawedges=True)
 
-    # todo: text box 
     ax = fig.add_axes([left - 0.01, bottom + 0.05, 0.001, 0.0001])
     ax.yaxis.set_ticklabels([text])
     ax.xaxis.set_visible(False)
 
-def draw_gpp_task_view(tasks_set):
-    fig = pyplot.figure("gpp L1 timeline", figsize=(16, 3))
+
+
+def draw_tasks_timeline_view(tasks_set,sfn=0):
+    fig = pyplot.figure("gpp L1 timeline", figsize=(16, 5))
+    pyplot.cla()
+    pyplot.clf()
 
     # task's time line 
-    left, bottom, width, height = 0.05, 0.7, 0.9, 0.15     
+    left, bottom, width, height = 0.05, 0.8, 0.9, 0.12     
     for tasks_per_core in tasks_set:
         ax = fig.add_axes([left, bottom, width, height])  # left, bottom, width, height
         cb = add_colorbar(ax, tasks_per_core)
         cb.ax.xaxis.set_visible(False)
         bottom -= height
 
-    # legend 
-    legend_left = 0.05
-    legend_bottom = 0.25
+    # legend for tasks
+    legend_left = 0.1
+    legend_bottom = 0.35
 
     for tasks in tasks_set:
         for task in tasks:
-            add_legend(fig, (legend_left, legend_bottom, 0.05, 0.08), task, task_color_map[task])
+            add_legend(fig, (legend_left, legend_bottom, 0.05, 0.08), task, tasks_color_map[task])
             legend_left += 0.15
 
-        legend_left = 0.05
+        # legend for conflict
+#        add_legend(fig, (legend_left, legend_bottom, 0.05, 0.08), "conflict", 'r')
+        legend_left = 0.1
         legend_bottom -= 0.1
+        
+    fig_text=pyplot.figtext(0.5, 0.95, 'sfn = %d' %(sfn))
+           
+    pyplot.draw()
+#    pyplot.show()
 
-    pyplot.show() 
-    
-def get_gpp_run_data(sfn):
-    global task_time_map
+is_1st_block_met=0
+def get_tasks_run_data(filename='run.log',sfn=None, start_sfn=None):
+    global tasks_time_map
+    global is_1st_block_met
     tasknames={"dl", "rach", "pucch", "srs", "pusch" }
     for each in tasknames:
-        task_time_map[each]= []
+        tasks_time_map[each]= []
     
-    set_filename('run.log')
-    
-    frame_base=get_frame_start_time()/1000
-    
-    for i in range(10):
-        for each in tasknames:
-            rtn=get_task_start_and_end_time(each, *get_packet_fn(each,sfn,i))
-            if rtn is not None:
-                task_time_map[each].append((rtn[0]/1000-frame_base,rtn[1]/1000-frame_base))
+    while 1:
+        block_sfn,block=next_block(filename)
+        if block_sfn ==0xffff or block == []:
+            return False, block_sfn
         
-    print task_time_map  
+        
+        if is_1st_block_met ==0:                    
+            if start_sfn is None:
+                is_1st_block_met=1
+            else:
+                if block_sfn != start_sfn:
+                    continue
+                else:
+                    is_1st_block_met=1
+        
+        if sfn is None:
+            sfn = block_sfn
+            break
+        elif block_sfn == sfn:
+            break 
+        
+
+    frame_base=get_frame_start_time_plus(block)/1000
+    
+    for i in range(END_INDEX):
+        for each in tasknames:
+            rtn=get_task_start_and_end_time_plus(block,each, *get_packet_fn(each,sfn,i))
+            if rtn is not None:
+                tasks_time_map[each].append((rtn[0]/1000-frame_base,rtn[1]/1000-frame_base))
+    
+#    print tasks_time_map
+    return True, block_sfn  
                                 
-def get_gpp_run_data_2(sfn):
-    global task_time_map
-    tasknames={"dl", "rach", "pucch", "srs", "pusch" }
-    for each in tasknames:
-        task_time_map[each]= []
-    
-    set_filename('run.log')
-    frame_base=get_frame_start_time()/1000
-    
-    log=get_log_of_sfn("run.log",sfn)
-    
-    for i in range(10):
-        for each in tasknames:
-            rtn=get_task_start_and_end_time_2(log,each, *get_packet_fn(each,sfn,i))
-            if rtn is not None:
-                task_time_map[each].append((rtn[0]/1000-frame_base,rtn[1]/1000-frame_base))
-        
-    print task_time_map  
-        
+def init():
+    global front_colors, tasks_color_map, tasks_time_map
+    front_colors = ([x / 256 for x in(130., 219., 113.)],
+                  [x / 256 for x in (9., 88., 101.)],
+                  [x / 256 for x in (36., 46., 55.)])
+
+    tasks_color_map = {'dl':  front_colors[0 % len(front_colors)],
+                 'rach':front_colors[1 % len(front_colors)],
+                 'srs': front_colors[2 % len(front_colors)],
+                 'pucch': front_colors[3 % len(front_colors)],
+                 'pusch': front_colors[4 % len(front_colors)] }
+       
     
 if __name__ == '__main__':
-    get_gpp_run_data(1124)
-    draw_gpp_task_view((('dl', 'rach',),
-                    ('pucch', 'srs'),
-                    ('pusch',)
-                    ))
-#     draw_gpp_task_view((('rach',),))
+    init()
+    
+    import time
+    
+    pyplot.ion()
+    
+    num_of_pic=2
+    for i in range(num_of_pic):
+        rtn, block_sfn=get_tasks_run_data('task_run_4_test.log')
+        if rtn:
+            draw_tasks_timeline_view((('dl', 'rach',), 
+                        ('pucch', 'srs'),('pusch',)), 
+                               sfn=block_sfn)
+        time.sleep(5)
+    print "done!"
     
