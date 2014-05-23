@@ -1,6 +1,21 @@
 
 import unittest
 
+'''
+This algorithm is used to find out the minimum length substring from a text string, 
+where the substring contains all elements from the pattern set.
+For example,  text='1231' and pattern = {2,1}, the minimum substring is '12'
+
+
+solution description:
+    init min_len as the size of text.
+    *) one by one visit element of the text from the tail  
+            if it is a pattern element
+                update pattern element's index list
+                if all pattern element had been found, update the min_len, save the substring
+            
+'''
+
 class MyQueue(object):
     def __init__(self):
         self.p_index=[]
@@ -51,8 +66,11 @@ def find_subset(text, p):
     # save all subset's index
     q=MyQueue()
     subs=[]
+    
+    #m: the index in text 
     m=len(text)-1
-    min_sub_len=len(text)
+    
+    min_len=len(text)
     while m>0:
         e=text[m]
         if e in p:
@@ -60,11 +78,11 @@ def find_subset(text, p):
             if q.size()==len(p):
                 i,j=q.segment()
                 subs.append((i,j))
-                sub_len=j-i+1
-                print "subset(%d): %s" %(sub_len,text[i:j+1])
+                len_=j-i+1
+                print "subset(%d): %s" %(len_,text[i:j+1])
                 
-                if sub_len<min_sub_len:
-                    min_sub_len=sub_len
+                if len_<min_len:
+                    min_len=len_
         else:
             pass
         m-=1
@@ -73,13 +91,13 @@ def find_subset(text, p):
         return None
     
     #find out the minimum length subset
-    min_subs=[]
+    m_subs=[]
     for each in subs:
-        sub_len=each[1]-each[0]+1
-        if sub_len==min_sub_len:
-            min_subs.append(text[each[0]:each[1]+1])
+        len_=each[1]-each[0]+1
+        if len_==min_len:
+            m_subs.append(text[each[0]:each[1]+1])
     
-    return min_subs
+    return m_subs
     
     
 class TestSubset(unittest.TestCase):
@@ -90,26 +108,3 @@ class TestSubset(unittest.TestCase):
         print r
         self.assertTrue('042' in r)
         self.assertTrue('204' in r)
-
-def find_pair(s,a):
-    r=[]
-    i=0 
-    j=len(s)-1
-    while i < j:
-        if s[i]+s[j]==a:
-            r.append([i,j])
-            j-=1
-        elif s[i]+s[j]<a:
-            i+=1
-        else:
-            j-=1
-                
-    return r
-
-
-class TestPair(unittest.TestCase):
-    def test_find_pair(self):
-        s=[1,2,3,4,5,6,7,8]
-        a=7
-        r=find_pair(s,a)
-        self.assertEqual(r,[[0,5],[1,4],[2,3]])
