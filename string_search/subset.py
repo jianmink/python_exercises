@@ -56,7 +56,7 @@ class MyQueue(object):
         str_+='\n'
         return str_ 
 
-def find_subset(text, p):
+def find_subs(text, p):
     '''
     text is a string sequence: e.g. 'hello it's a subset test'
     p is a characters set: e.g. (t, b, s)
@@ -71,22 +71,38 @@ def find_subset(text, p):
     m=len(text)-1
     
     min_len=len(text)
-    while m>0:
-        e=text[m]
-        if e in p:
-            q.update(e,m)
-            if q.size()==len(p):
-                i,j=q.segment()
-                subs.append((i,j))
-                len_=j-i+1
-                print "subset(%d): %s" %(len_,text[i:j+1])
-                
-                if len_<min_len:
-                    min_len=len_
-        else:
-            pass
-        m-=1
     
+    p_j=-1
+    is_found=False
+    
+    for m in range(len(text)-1, -1,-1):
+        e=text[m]
+
+        if e not in p:
+            continue
+        
+        # a pattern element
+        q.update(e,m)
+        
+        if q.size()<len(p):
+            continue
+        
+        #the first candidate
+        if not is_found:
+            is_found=True
+        #bypass the following long substring 
+        elif e!=text[p_j]:
+            continue
+        
+        #add the candidate substring 
+        i,j=q.segment()
+        p_j=j
+        len_=j-i+1
+        print "subset(%d): %s" %(len_,text[i:j+1])
+        if len_<=min_len:
+            subs.append((i,j))
+            min_len=len_
+                    
     if len(subs)==0:
         return None
     
@@ -104,7 +120,7 @@ class TestSubset(unittest.TestCase):
     def test_find_subset(self):
         s='1232042'
         p=('2','0','4')
-        r=find_subset(s,p)
+        r=find_subs(s,p)
         print r
         self.assertTrue('042' in r)
         self.assertTrue('204' in r)
