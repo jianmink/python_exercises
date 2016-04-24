@@ -1,59 +1,103 @@
 
 import unittest
 
-
+import threading
+from time import sleep
+from Queue import Queue
+from copy import copy
+        
 IMMDB_FM = {
-            # key: (majorId, minorId, severity, source, additionalText pattern)
-            "ConnectionToDBError": ("193", "1", "critical", "", ""),
-            "ConnectionToSS7Error": ("193", "2", "major", "", ""),
-            "ConnectionToDiameterStackError": ("193", "3", "critical", "%s", "")
+            # key: (majorType, minorType, severity, source, additionalText pattern)
+            "ConnectionToDBError": ("193", "1", "critical", "blade_level", ""),
+            "ConnectionToSS7Error": ("193", "2", "major", "blade_level", ""),
+            "ConnectionToDiameterStackError": ("193", "3", "critical", "cluster_level", "to peer %s")
             }
+
+HOST_NAME = "PL-3"
+
+'''
+dependency
+    user 
+        Alarm
+        AlarmService
+            create()
+            raiseAlarm()
+            clearAlarm()
+    
+    AlarmService
+        Alarm
+        AlarmFactory
+        NtfNoticeFactory
+        NtfService
+
+    NtfService
+        NtfNotice
+        Queue
+        
+'''
+
 
 class Alarm(object):
     """
         Alarm with attribute name, additionalText and source
     """
-    def __init__(self, name="", additionalText="", source=""):
-        self.name = name
-        self.additionalText = additionalText
-        self.source = source
-
-    def __str__(self):
-        s = ("%s %s from %s " 
-              % (self.name, self.additionalText, self.source))
-        return s
-
-class SANotice(object):
-    """
-        Notice of A NTF service
-    """
-    def __init__(self, alarm):
-        self.name = alarm.name
-        self.additionalText = alarm.additionalText
-        self.source = alarm.source
+    def __init__(self):
+        self.name = ""
+        self.additionalText = ""
+        self.source = ""
+        
         self.severity = "unknown"
-        self.majorId = 0
-        self.minorId = 0
+        self.majorType = 0
+        self.minorType = 0
         self.action = "raise"
-        
-    def setSeverity(self, severity):
-        self.severity = severity
 
-    def setMajorId(self, majorId):
-        self.majorId = majorId
-        
-    def setMinorId(self, minorId):
-        self.minorId = minorId
-        
-    def setAction(self, action):
-        self.action = action
             
     def __str__(self):
         s = ("(%s.%s) %s %s %s %s from %s " 
-              % (self.majorId, self.minorId, self.action, self.severity, 
+              % (self.majorType, self.minorType, self.action, self.severity,
                  self.name, self.additionalText, self.source))
         return s
     
+
+class NtfNotice():
+    
+    def __init__(self):
+        self.name =""
+        self.additionalText = ""
+        self.majorId = 0
+        self.minorId = 0
+        self.source = ""
+        self.severity = ""
+        # and other field
+
+    def __str__(self):
+        s = ("(%s.%s) %s %s %s %s from %s " 
+              % (self.majorId, self.minorId, self.action, self.severity,
+                 self.name, self.additionalText, self.source))
+        return s
+
+class NoticeFactory(object):
+    
+    @staticmethod
+    def create(alarm):
+        notice = NtfNotice()
+        notice.name = alarm.name
+        notice.source = alarm.source
+        notice.additionalText = alarm.additionalText
+        notice.majorId = alarm.majorType
+        notice.minorId = alarm.minorType
+        notice.action = alarm.action
+        notice.severity = alarm.severity
+        
+        return notice
+    
+    @staticmethod
+    def toMajorId(majorType):
+        return majorType
+    
+    @staticmethod
+    def toMinorId(minorType):
+        return minorType
 
 
 class NtfService(object):
@@ -62,12 +106,25 @@ class NtfService(object):
             1) send notice out
     """
     def __init__(self):
-        pass
+        self.queue = Queue(600)
+        self.thread = threading.Thread(
+                                       target=NtfService.loop,
+                                       args=(self.queue,))
+        self.thread.start()
+    
+    def __del__(self):
+        self.thread.join()
     
     def send(self, notice):
-        print "send NTF notice:", notice
+        self.queue.put(notice)
+    
+    @staticmethod
+    def loop(queue):
+        sleep(1)
+        while not queue.empty():
+            print queue.get()
         
-
+        
 
 class AlarmService(NtfService):
     """
@@ -75,24 +132,26 @@ class AlarmService(NtfService):
             1) support re-send
             2)  
     """
-    def __init__(self, alarmTypes):
-        self.alarmTypes = alarmTypes
+    def __init__(self):
+        NtfService.__init__(self)
+        alarmTypes = AlarmTypes(IMMDB_FM)
+        self.factory = AlarmFactory(alarmTypes)
         
-    def toNotice(self, alarm, action):
-        notice = SANotice(alarm)
-        notice.setSeverity(self.alarmTypes.getSeverity(alarm.name))
-        notice.setMajorId(self.alarmTypes.getMajorId(alarm.name))
-        notice.setMinorId(self.alarmTypes.getMinorId(alarm.name))
-        notice.setAction(action)
-        return notice
-    
+        
+    def create(self, name, additionalText=""):
+        return self.factory.create(name, additionalText)
+        
     def raiseAlarm(self, alarm):
-        
-        self.send(self.toNotice(alarm, "raise"))
+        alarm.action = "raise"
+        notice = NoticeFactory.create(alarm)
+
+        self.send(notice)
     
     def clearAlarm(self, alarm):
+        alarm.action = "clear"
+        notice = NoticeFactory.create(alarm)
         
-        self.send(self.toNotice(alarm, "clear"))
+        self.send(notice)
         
         
 
@@ -101,7 +160,7 @@ class AlarmTypes(object):
         "load all FM alarm types from DB"
         self.alarmTypes = immdb_fm
          
-    def getMajorId(self, name):
+    def getMajorType(self, name):
         try:
             return self.alarmTypes[name][0]
 
@@ -109,7 +168,7 @@ class AlarmTypes(object):
             print "undefined alarm"
             return ""
 
-    def getMinorId(self, name):
+    def getMinorType(self, name):
         try:
             return self.alarmTypes[name][1]
 
@@ -124,6 +183,15 @@ class AlarmTypes(object):
         except KeyError:
             print "undefined alarm"
             return ""
+   
+   
+    def getSource(self, name):
+        try:
+            return self.alarmTypes[name][3]
+
+        except KeyError:
+            print "undefined alarm"
+            return ""
             
     def getAdditionalTextPattern(self, name):
         try:
@@ -132,22 +200,58 @@ class AlarmTypes(object):
         except KeyError:
             print "undefined alarm"
             return ""
-            
+
+ 
+class AlarmFactory(object):
+    
+    def __init__(self,alarmTypes):
+        self.alarmTypes = alarmTypes
         
+    
+    def create(self, name, additionalText=""):
+        " create alarm instance"
+        alarm =  Alarm()
+        
+        alarm.name = name
+        
+        level = self.alarmTypes.getSource(alarm.name)
+        alarm.source = self.source(level) 
+        
+        pattern = self.alarmTypes.getAdditionalTextPattern(alarm.name)
+        alarm.additionalText = self.compose(pattern,additionalText)
+        
+        alarm.severity = (self.alarmTypes.getSeverity(alarm.name))
+        alarm.majorType = (self.alarmTypes.getMajorType(alarm.name))
+        alarm.minorType = (self.alarmTypes.getMinorType(alarm.name))
+        alarm.action= ""
+        
+        return alarm
+    
+    def source(self, level):
+        if level == "blade_level":
+            s = HOST_NAME
+        elif level == "cluster_level":
+            s = "IPWorks Diameter AAA"
+        else:
+            s = "unknown source"
+        
+        return s
+    
+    def compose(self,pattern,text):
+        if '%s' in pattern:
+            s = pattern %(text)
+        else:
+            s = text
+               
+        return s
+    
 
 class TestAlarm (unittest.TestCase):
-    alarmTypes = AlarmTypes(IMMDB_FM)
-    service = AlarmService(alarmTypes)
 
-    def testCreateAlarmInstance(self):
-        dbConnectionError = Alarm("ConnectionToDBError", "N/A", "PL-3")
-        print str(dbConnectionError)
-
-    def testRaiseAlarm(self):
-        e = Alarm("ConnectionToSS7Error", "File", "PL-3")
-        TestAlarm.service.raiseAlarm(e)
-        
     def testClearAlarm(self):
-        e = Alarm("ConnectionToDiameterStackError", "no1@hss.ericsson.se", "PL-3")
-        TestAlarm.service.clearAlarm(e)
+        service = AlarmService()
+        
+        e = service.create("ConnectionToDiameterStackError", "no1@hss.ericsson.se")
+        service.raiseAlarm(copy(e))
+        service.clearAlarm(copy(e))
         
