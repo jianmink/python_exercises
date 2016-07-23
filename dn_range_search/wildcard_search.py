@@ -4,31 +4,30 @@ import unittest
 class SearchNode:
     def __init__(self):
         self.sub_nodes={}
-        self.v=None
+        self.v='root'
         self.records={}
     
-    def add(self, dn, naptr):
-        print "add- %s  \t%s" %(dn, naptr)
-        self.add_r(dn,naptr, -1)
+    def add(self, prefix, naptr):
+        print "add- %s  \t%s" %(prefix, naptr)
+        self.add_r(prefix,naptr, 0)
     
-    def add_r(self, dn, naptr, ix):
-        ix+=1;
+    def add_r(self, prefix, naptr, level):
         
         # leaf node
-        if ix == len(dn):
-            if not self.records.has_key(dn):
-                self.records[dn]=[]
+        if level == len(prefix):
+            if not self.records.has_key(prefix):
+                self.records[prefix]=[]
                            
-            self.records[dn].append(naptr)
+            self.records[prefix].append(naptr)
             return
         
         # inner node   
-        c = int(dn[ix]) 
+        c = int(prefix[level]) 
         if not self.sub_nodes.has_key(c):
             self.sub_nodes[c]=SearchNode()
             self.sub_nodes[c].v=c
         
-        self.sub_nodes[c].add_r(dn, naptr,ix)
+        self.sub_nodes[c].add_r(prefix, naptr,level+1)
 
     def dump(self,level=0):
         

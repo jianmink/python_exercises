@@ -1,12 +1,5 @@
-from matplotlib.pylab import *
-import numpy as np
 import cmath
 import unittest
-
-def draw(points):
-    figure("Amplitude", figsize=(5,5))
-    plot(arange(len(points)),points)
-    show()
 
 def dft(x):
     count=0
@@ -43,7 +36,7 @@ def recursive_fft(A):
 
     w_n= cmath.exp(complex(0,-2*cmath.pi/N))
     w=1
-    print 'n= ',N, " w_n= ",w_n 
+#     print 'n= ',N, " w_n= ",w_n 
     
     A_0= [A[i] for i in range(N) if i%2==0 ]
     A_1= [A[i] for i in range(N) if i%2==1 ]
@@ -62,8 +55,8 @@ def recursive_fft(A):
         w=w*w_n
         recursive_fft_count+=2
     
-    print "Y:",
-    print_(Y)
+#     print "Y:",
+#     print_(Y)
     return Y
 
 def print_(z):
@@ -90,7 +83,7 @@ class TestFFT(unittest.TestCase):
         recursive_fft_count=0
         x=[]
         for n in range(N):
-            x.append(cmath.cos(2*cmath.pi*n/N))
+            x.append(cmath.sin(2*cmath.pi*n/N))
         print_(x)
         X=recursive_fft(x)
         E=dft(x)
@@ -102,14 +95,15 @@ class TestFFT(unittest.TestCase):
         return X
     
         
-#     @unittest.skip('')
+    @unittest.skip('')
     def test_fft_4(self):
         self.fft_recursive_test(4)
         
+    @unittest.skip('')
     def test_fft_8(self):
         self.fft_recursive_test(8)
         
     def test_fft_64(self):
         X=self.fft_recursive_test(64)
-#         draw(X)
+        
         

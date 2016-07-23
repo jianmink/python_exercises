@@ -7,31 +7,29 @@ import unittest
 '''
 FIB=(0, 1, 1, 2, 3, 5, 8, 13, 21, 34 , 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765)
 
-
 def fibo_r(n):
-    return fibo_recursive_imp(n)
-
-def fibo_recursive_imp(n):
+    '''
+    recursive version
+    '''
     if n<2: return n
-    else:
-        return fibo_recursive_imp(n -1) + fibo_recursive_imp(n -2)
-
+    else: return fibo_r(n -1) + fibo_r(n -2)
 
 def fibo_dp(n):
+    '''
+    dynamic programming version
+    '''
     F=[0,1]
-
     if n>1:
         for i in range(2,n+1): F.append(F[i-2] + F[i-1])
-    
     return F[n]
 
 def fibo(n):
+    '''
+    dynamic programming with less storage
+    '''
     F=[0,1]
-
     if n<2: return F[n]
-        
-    for _ in range(2,n+1): F[0],F[1] = F[1], F[0]+F[1]
-    
+    for _ in range(2,n+1): F[0],F[1] = F[1], F[0]+F[1]  
     return  F[1]
 
 class FiboTest(unittest.TestCase):
@@ -48,7 +46,7 @@ class FiboTest(unittest.TestCase):
         self.assertEqual(FIB[20], fibo_dp(20))
 
     def testPerformance(self):
-        n=30
+        n=20
         
         a=fibo_r(n)
         b=fibo_dp(n)

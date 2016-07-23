@@ -8,9 +8,6 @@ class TestGame(unittest.TestCase):
     def setUp(self):
         pass
 
-    def test_dummy(self):
-        self.assertEqual(1, 1)
-    
     def test_game_batch_init(self):
         self.game=Game(1,3)
         self.game.init([ [0,1,0] ])

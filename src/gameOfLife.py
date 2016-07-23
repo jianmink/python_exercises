@@ -3,14 +3,14 @@ import time
 import os
 
 def game_of_Life_rules(state, num_live_neighbours):
-    if state and (num_live_neighbours == 2 or num_live_neighbours == 3):
-        state=True
-    elif not state and num_live_neighbours == 3:
-        state=True
-    else:
-        state=False
+    new_state=False
+    if state: 
+        if num_live_neighbours == 2 or num_live_neighbours == 3: new_state=True
     
-    return state
+    if not state:
+        if num_live_neighbours == 3: new_state=True
+    
+    return new_state
 
 
 class Person():
@@ -20,17 +20,6 @@ class Person():
         self.liveNB=0
         self.position=(0,0)
     
-    def set_num_live_neighbours(self, liveNB):
-        self.liveNB=liveNB
-        return self
-    
-    def get_num_live_neighbours(self):
-        return self.liveNB
-    
-    def live(self):
-        self.state=True
-        return self
-        
     def die(self):
         self.state=False
         return self
@@ -80,11 +69,11 @@ class Group():
     def set_live_neighbours_4_all_live_members(self):
         for key in self.live_members:
             person=self.live_members[key]
-            person.set_num_live_neighbours(self.count_live_neighbours(key))
+            person.liveNB = self.count_live_neighbours(key)
             
     def set_his_live_neighbours(self,him):
         liveNB=self.count_live_neighbours(him.get_x_y())
-        him.set_num_live_neighbours(liveNB)
+        him.liveNB = liveNB
         pass
     
     def count_live_neighbours(self,(x,y)):
