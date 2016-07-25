@@ -263,24 +263,58 @@ class IMMDB(object):
         link_size = self.sizeof_links(link_head)
         if  link_size == 1:
             print "INFO: link size is one, so remove the selector"
+            self.selectors.pop(rdn)
             # todo: invoke IMM CFG -d command
         else:
             print "INFO: link size is %d" %(link_size)
             
     
-    def add_selector(self):
-        pass
+    def add_selector(self, app, dest, peer):
+        s = Selector()
+        
+        s.application_id = app
+        s.destination = dest.rdn
+        s.peer = peer.rdn
+        s.rdn = ("otpdiaSelector=%s_%s" %(''.join(dest.host), dest.realm) )
+        
+        if s.rdn not in self.selectors.keys():
+            self.selectors[s.rdn] = s
+            
+        return s
+        
             
     def add_domain(self,host, realm):
-        pass
+        d = Domain()
+        d.rdn = ("otpdiaDomain=%s_%s" %(''.join(host), realm))
+        d.host = host
+        d.realm = realm
+        
+        self.domains[d.rdn] = d
+        
+        return d
+        
          
-    def add_link(self, host, realm):
-        pass
+    def add_link(self, domain):
+        n = Link()
+        
+        n.rdn =("otpdiaCons=%s_%s" %(''.join(domain.host), domain.realm))
+        n.next = NULL_VALUE
+        n.data = domain.rdn
+        
+        if n.rdn not in self.links.keys():
+            self.links[n.rdn] = n
+        
+        return n
     
     def rm_domain(self, rdn):
+        
+        self.domains.pop(rdn)
+        
         self.immcfg.rm_imm_object(rdn)
         
     def rm_link(self, rdn):
+        
+        self.links.pop(rdn)
         self.immcfg.rm_imm_object(rdn)
 
 
@@ -358,13 +392,17 @@ class RouteTable(object):
                 
     def add(self, app, dest, peer):
         
-        d1 = self.imm.add_domain(dest.host, dest.realm)
+        d1 = self.imm.add_domain(dest[0], dest[1])
         
-        d2 = self.imm.add_domain(peer.host, peer.realm)
+        d2 = self.imm.add_domain(peer[0], peer[1])
         
         link = self.imm.add_link(d2)
         
-        self.imm.add_selector(app, d1, link)
+        selector = self.imm.add_selector(app, d1, link)
+        
+        record = RouteRecord(selector, d1, link, 3)
+        
+        self.records.append(record)
         
                 
     def rm_one_record(self, record):

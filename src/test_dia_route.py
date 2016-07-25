@@ -4,6 +4,8 @@ import unittest
 from dia_route_ctr import *
 
 
+
+
 class DataMama(object):
     def __init__(self):
         pass
@@ -223,5 +225,27 @@ class TestRouteTable(unittest.TestCase):
         
         rt.rm('16777265', ([NULL_VALUE,], 'hss.com'), (['hss1',], 'hss.com') )
         print rt.to_string()
-            
         
+        self.assertEqual(2, len(rt.imm.domains))
+        self.assertEqual(1, len(rt.imm.links))
+        self.assertEqual(1, len(rt.imm.selectors))
+
+    
+    def test_rt_add_record(self):
+        
+        print 'test_rt_add_record'
+        
+        rt = self.dm.create_route_table_w_hss_failover()
+        
+        rt.add('16777265', ([NULL_VALUE,], 'hss.com'), (['hss3',], 'hss.com') )
+        print rt.to_string()
+        
+        self.assertEqual(4, len(rt.imm.domains))
+        self.assertEqual(3, len(rt.imm.links))
+        self.assertEqual(1, len(rt.imm.selectors))
+
+
+
+if __name__ == "__main__":
+    unittest.main()
+    
