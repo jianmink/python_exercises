@@ -16,6 +16,34 @@ NULL_VALUE = "<Empty>"
 WILDCARD_SYMBOL = "*"
 
 
+
+'''
+SC-1:~ # immlist -c OtpdiaDomain
+
+<< OtpdiaDomain - CONFIG >>
+realm : SA_STRING_T [1] {CONFIG, WRITEABLE, INITIALIZED}
+otpdiaDomain : SA_STRING_T [1] {RDN, CONFIG, INITIALIZED}
+host : SA_STRING_T [0..*] = Empty {CONFIG, WRITEABLE, MULTI_VALUE}
+SC-1:~ # immlist -c OtpdiaCons  
+
+<< OtpdiaCons - CONFIG >>
+tail : SA_NAME_T [0] = Empty {CONFIG, WRITEABLE}
+otpdiaCons : SA_STRING_T [1] {RDN, CONFIG, INITIALIZED}
+head : SA_NAME_T [1] {CONFIG, WRITEABLE, INITIALIZED}
+SC-1:~ # immlist -c OtpdiaSelector
+
+<< OtpdiaSelector - CONFIG >>
+service : SA_NAME_T [1..*] {CONFIG, WRITEABLE, INITIALIZED, MULTI_VALUE}
+peer : SA_NAME_T [1] {CONFIG, WRITEABLE, INITIALIZED}
+otpdiaSelector : SA_STRING_T [1] {RDN, CONFIG, INITIALIZED}
+destination : SA_NAME_T [0..*] = Empty {CONFIG, WRITEABLE, MULTI_VALUE}
+applicationId : SA_UINT32_T [0..*] = Empty {CONFIG, WRITEABLE, MULTI_VALUE}
+
+'''
+
+ATTRIBUTE_HAS_MULTI_VALUE = ("host",) # "service", "destination", "applicationId" )
+
+
 class OtpdiaObject(object):
     def __init__(self):
         pass
@@ -25,7 +53,15 @@ class OtpdiaObject(object):
         for each in text:
             t = each.split()
             if len(t) > 2:
-                self.key_value_pairs[t[0].rstrip()] = t[2].rstrip()
+                
+                k = t[0].rstrip()
+                if k in ATTRIBUTE_HAS_MULTI_VALUE:
+                    value_list = [each.rstrip() for each in t[2:] if '(' not in each ]
+                    
+                    self.key_value_pairs[k] = value_list
+                else:
+                    v = t[2].rstrip()    
+                    self.key_value_pairs[k] = v
         
          
     
@@ -94,7 +130,7 @@ class Domain(OtpdiaObject):
         return self
         
     def to_string(self):
-        if self.host == NULL_VALUE:
+        if self.host == [NULL_VALUE,]:
             host = WILDCARD_SYMBOL
         else:
             host = self.host
@@ -107,12 +143,61 @@ class Domain(OtpdiaObject):
         return ("(%s , %s)" %(host, realm))
 
 
+class IMMCFG():
+    def __init__(self):
+        
+        self.SERVICE_DN="otpdiaService=epc_aaa,otpdiaProduct=AAAServer"
+        pass
+    
+    def rm_imm_object(self, rdn):
+#         rdn = "otpdiaCons=link_to_" + host + "_" + realm
+        cmd_rm = "immcfg -d " + rdn
+        print cmd_rm
+        
+        run_command(cmd_rm)
+    
+    
+    def add_otpdiaselector(self, app, host, realm, peer):
+        # dest: (host,realm)
+        rdn = "otpdiaSelector=selector_" + host + "_" + realm
+        cmd_create = 'immcfg -c OtpdiaSelector %s -a peer="%s" -a  service="%s"' %(rdn, peer.rdn, self.SERVICE_DN )
+        print cmd_create
+        run_command(cmd_create)
+        
+        cmd_set = "immcfg -a app=%s %s" %(app,rdn)
+        print cmd_set
+        run_command(cmd_set)
+    
+    def add_otpdiacons(self, domain):
+        rdn =  "otpdiaCons=link_to_" + domain.host+"_" + domain.realm
+        
+        cmd_create = "immcfg -c OtpdiaCons %s -a head=%s" %(rdn, domain.rdn)
+        print cmd_create
+        run_command(cmd_create)
+    
+    
+    def add_otpdiadomain(self, host, realm):
+        # cmd example:
+        #     immcfg -c OtpdiaDomain otpdiaDomain=domain_hss3 -a realm=ericsson.se
+        #     immcfg -a host=hss3 otpdiaDomain=domain_hss3  
+        
+        rdn = "otpdiaDomain=domain_" + host+"_" + realm
+        
+        cmd_create = "immcfg -c OtpdiaDomain %s -a head=%s" %(rdn)
+        print cmd_create
+        run_command(cmd_create)
+        
+        cmd_set = "immcfg -a host=%s %s" %(host,rdn)
+        print cmd_set
+        run_command(cmd_set)
+    
 
 class IMMDB(object):
     def __init__(self):
         self.selectors={}
         self.links={}
         self.domains={}
+        self.immcfg = IMMCFG()
         
     
     def load(self):
@@ -158,62 +243,53 @@ class IMMDB(object):
             text = run_command(cmd)
             s = Domain().parse(text)
             self.domains[line.rstrip()]=s
+     
+    def sizeof_links(self, link_head):
+        
+        link = link_head
+        count = 1
+        while link.next != NULL_VALUE:
             
+            count += 1
+            link = self.links[link.next]
             
-    def rm_otpdia_selector(self):
-        pass
+        return count
+            
+    def rm_selector(self, rdn):
+        selector = self.selectors[rdn]
+        
+        link_head = self.links[selector.peer]
+        
+        link_size = self.sizeof_links(link_head)
+        if  link_size == 1:
+            print "INFO: link size is one, so remove the selector"
+            # todo: invoke IMM CFG -d command
+        else:
+            print "INFO: link size is %d" %(link_size)
+            
     
-    def add_otpdia_selector(self):
+    def add_selector(self):
         pass
             
-    def add_otpdia_domain(self,host, realm):
-        # cmd example:
-        #     immcfg -c OtpdiaDomain otpdiaDomain=domain_hss3 -a realm=ericsson.se
-        #     immcfg -a host=hss3 otpdiaDomain=domain_hss3  
-        
-        rdn =  "otpdiaDomain=domain_"+host+"_"+realm
-        cmd_create_domain = "immcfg -c OtpdiaDomain %s -a realm=%s" %(rdn, realm)
-        cmd_set_host = "immcfg -a host=%s %s" %(host,rdn)
-        
-        print cmd_create_domain
-        run_command(cmd_create_domain)
-        
-        print cmd_set_host
-        run_command(cmd_set_host)
+    def add_domain(self,host, realm):
+        pass
          
-    def rm_otpdia_domain(self, host, realm):
-        rdn = "otpdiaDomain=con_to_domain_"+host+"_"+realm
-        cmd_rm_domain = "immcfg -d "+rdn
-        print cmd_rm_domain
-        
-        run_command(cmd_rm_domain)
+    def add_link(self, host, realm):
+        pass
     
-    
-    def add_otpdia_con(self, host, realm):
-        # cmd example:
-        #     immcfg -c OtpdiaDomain otpdiaDomain=domain_hss3 -a realm=ericsson.se
-        #     immcfg -a host=hss3 otpdiaDomain=domain_hss3  
+    def rm_domain(self, rdn):
+        self.immcfg.rm_imm_object(rdn)
         
-        domain_rdn = "otpdiaDomain=domain_" + host+"_" + realm
-        rdn =  "otpdiaCons=con_to_domain_" + host+"_" + realm
-        
-        cmd_create_otpdia_con = "immcfg -c OtpdiaCons %s -a head=%s" %(rdn, domain_rdn)
-    #     cmd_set_host = "immcfg -a host=%s %s" %(host,rdn)
-        
-        print cmd_create_otpdia_con
-        run_command(cmd_create_otpdia_con)
-        
-    def rm_otpdia_con(self, host, realm):
-        rdn = "otpdiaDomain=con_to_domain_"+host+"_"+realm
-        cmd_rm_con = "immcfg -d " + rdn
-        print cmd_rm_con
-        
-        run_command(cmd_rm_con)
+    def rm_link(self, rdn):
+        self.immcfg.rm_imm_object(rdn)
 
 
 class RouteRecord(object):
-    def __init__(self, app, dest, peer, priority):
-        self.app = app
+    def __init__(self, selector, dest, peer, priority):
+        
+        self.selector = selector
+        
+        self.app = selector.application_id
         self.dest = dest 
         self.peer = peer
         self.priority = priority
@@ -236,7 +312,7 @@ class RouteTable(object):
             while True:
                 domain_dest = self.imm.domains[selector.destination]
                 
-                record = RouteRecord(selector.application_id, 
+                record = RouteRecord(selector, 
                                      domain_dest, 
                                      link,
                                      priority)
@@ -278,13 +354,27 @@ class RouteTable(object):
             if (record.app == app and 
                 (domain_d.host, domain_d.realm) == dest and
                 (domain_p.host, domain_p.realm) == peer ):
+                self.rm_one_record(record)
                 
-                self.records.remove(record)
+    def add(self, app, dest, peer):
+        
+        d1 = self.imm.add_domain(dest.host, dest.realm)
+        
+        d2 = self.imm.add_domain(peer.host, peer.realm)
+        
+        link = self.imm.add_link(d2)
+        
+        self.imm.add_selector(app, d1, link)
+        
                 
-                self.imm.rm_otpdia_selector(record.)
-                self.imm.rm_otpdia_domain(record.peer)
-                
-                
+    def rm_one_record(self, record):
+        # todo: adjust priority of remaining node
+        # 
+        self.records.remove(record)
+        
+        self.imm.rm_selector(record.selector.rdn)
+        self.imm.rm_link(record.peer.rdn)
+        self.imm.rm_domain(record.dest.rdn)           
                 
                     
 
@@ -316,7 +406,7 @@ def add(args):
         print "please give the realm value"
         return False
     
-    imm.add_otpdia_domain(host, args.realm)
+    imm.add_domain(host, args.realm)
 
 def rm(args):
     imm = IMMDB()
@@ -330,7 +420,7 @@ def rm(args):
         print "please give the realm value"
         return False
     
-    imm.rm_otpdia_domain(host, args.realm)
+    imm.rm_domain(host, args.realm)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
