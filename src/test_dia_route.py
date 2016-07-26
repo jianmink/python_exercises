@@ -4,7 +4,29 @@ import unittest
 from dia_route_ctr import *
 
 
+'''
+SC-1:~ # immlist -c OtpdiaDomain
 
+<< OtpdiaDomain - CONFIG >>
+realm : SA_STRING_T [1] {CONFIG, WRITEABLE, INITIALIZED}
+otpdiaDomain : SA_STRING_T [1] {RDN, CONFIG, INITIALIZED}
+host : SA_STRING_T [0..*] = Empty {CONFIG, WRITEABLE, MULTI_VALUE}
+SC-1:~ # immlist -c OtpdiaCons  
+
+<< OtpdiaCons - CONFIG >>
+tail : SA_NAME_T [0] = Empty {CONFIG, WRITEABLE}
+otpdiaCons : SA_STRING_T [1] {RDN, CONFIG, INITIALIZED}
+head : SA_NAME_T [1] {CONFIG, WRITEABLE, INITIALIZED}
+SC-1:~ # immlist -c OtpdiaSelector
+
+<< OtpdiaSelector - CONFIG >>
+service : SA_NAME_T [1..*] {CONFIG, WRITEABLE, INITIALIZED, MULTI_VALUE}
+peer : SA_NAME_T [1] {CONFIG, WRITEABLE, INITIALIZED}
+otpdiaSelector : SA_STRING_T [1] {RDN, CONFIG, INITIALIZED}
+destination : SA_NAME_T [0..*] = Empty {CONFIG, WRITEABLE, MULTI_VALUE}
+applicationId : SA_UINT32_T [0..*] = Empty {CONFIG, WRITEABLE, MULTI_VALUE}
+
+'''
 
 class DataMama(object):
     def __init__(self):
@@ -72,17 +94,24 @@ class DataMama(object):
     
     def create_domain_object(self, hosts, realm):
         
+        if len(hosts) > 0:
+            rdn = "otpdiaDomain=%s_%s" %(",".join(hosts), realm)
+            host = " ".join(hosts)
+        else:
+            rdn = "otpdiaDomain=_%s" %(realm)
+            host = "<Empty>"
+        
         str_ =  ("""
         immlist otpdiaDomain=domain_hss 
         Name                                               Type         Value(s)
         ========================================================================
         realm                                              SA_STRING_T  %s 
-        otpdiaDomain                                       SA_STRING_T  otpdiaDomain=%s_%s 
+        otpdiaDomain                                       SA_STRING_T  %s 
         host                                               SA_STRING_T  %s
         SaImmAttrImplementerName                           SA_STRING_T  C-diameter 
         SaImmAttrClassName                                 SA_STRING_T  OtpdiaDomain 
         SaImmAttrAdminOwnerName                            SA_STRING_T  <Empty>
-        """ %( realm, "".join(hosts), realm, " ".join(hosts))
+        """ %( realm, rdn, host)
         )
         
         d = Domain()
@@ -120,7 +149,7 @@ class DataMama(object):
         d = Domain()
         d.parse(self.get_one_domain().split('\n'))
         
-        imm = IMMDB() 
+        imm = IMM() 
         imm.selectors = {s.rdn:s}
         imm.links = {n.rdn:n}
         imm.domains = {d.rdn:d}
@@ -131,14 +160,14 @@ class DataMama(object):
     def create_route_table_w_hss_failover(self):
         d1 = self.create_domain_object(("hss1",), "hss.com")
         d2 = self.create_domain_object(("hss2",), "hss.com")
-        d = self.create_domain_object((NULL_VALUE,) , "hss.com")
+        d = self.create_domain_object(() , "hss.com")
         
         link_node1 = self.create_link_object(d1, "otpdiaCons=hss2_hss.com")
         link_node2 = self.create_link_object(d2)
         
         s = self.create_selector_object(d, link_node1)
         
-        imm = IMMDB() 
+        imm = IMM() 
         imm.selectors = {s.rdn:s}
         imm.links = {link_node1.rdn:link_node1, link_node2.rdn:link_node2}
         imm.domains = {d1.rdn:d1, d2.rdn:d2, d.rdn:d}
@@ -156,7 +185,7 @@ class DataMama(object):
         
         s = self.create_selector_object(d, link_node1)
         
-        imm = IMMDB() 
+        imm = IMM() 
         imm.selectors = {s.rdn:s}
         imm.links = {link_node1.rdn:link_node1}
         imm.domains = {d1.rdn:d1, d.rdn:d}
@@ -172,7 +201,7 @@ class TestLoadImmInfo(unittest.TestCase):
         s = Selector()
         s.parse(self.dm.get_one_selector().split('\n'))
         print s.to_string()
-        self.assertEqual('16777265',s.application_id)
+        self.assertTrue('16777265' in s.app)
         self.assertEqual('otpdiaCons=con_hss', s.peer)
         self.assertEqual('otpdiaDomain=domain_hss', s.destination)
         self.assertEqual('otpdiaSelector=selector_1', s.rdn)
@@ -223,7 +252,7 @@ class TestRouteTable(unittest.TestCase):
         
         rt = self.dm.create_route_table_w_hss_failover()
         
-        rt.rm('16777265', ([NULL_VALUE,], 'hss.com'), (['hss1',], 'hss.com') )
+        rt.rm(['16777265',], ([NULL_VALUE,], 'hss.com'), (['hss1',], 'hss.com') )
         print rt.to_string()
         
         self.assertEqual(2, len(rt.imm.domains))
@@ -237,12 +266,25 @@ class TestRouteTable(unittest.TestCase):
         
         rt = self.dm.create_route_table_w_hss_failover()
         
-        rt.add('16777265', ([NULL_VALUE,], 'hss.com'), (['hss3',], 'hss.com') )
-        print rt.to_string()
+        rt.add(['16777265','16777250'], ([NULL_VALUE,], 'hss.com'), (['hss3',], 'hss.com') )
+        print rt.to_string(f="TEXT")
         
         self.assertEqual(4, len(rt.imm.domains))
         self.assertEqual(3, len(rt.imm.links))
         self.assertEqual(1, len(rt.imm.selectors))
+        
+        
+    def test_rt_rm_the_first_record(self):
+        print "test_rt_rm_the_first_record"
+        
+        rt = self.dm.create_route_table_w_hss_failover()
+        rt.rm_by_id(1)
+        print rt.to_string()
+        
+        self.assertEqual(2, len(rt.imm.domains))
+        self.assertEqual(1, len(rt.imm.links))
+        self.assertEqual(1, len(rt.imm.selectors))
+
 
 
 

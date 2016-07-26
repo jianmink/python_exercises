@@ -11,37 +11,21 @@ TO_APP_NAME = {
 '99887766':"SWm+"
                }
 
-
 NULL_VALUE = "<Empty>"
 WILDCARD_SYMBOL = "*"
 
 
+# todo list
+# 1. support multiple value of otpdiaSelector.destination 
+# 2. support rm record by record id
+# 3. support transaction for immcfg cmd
+# 4. support shell mode
+# 5. support add/remove hss/dra into/from load-sharing group
+# 6. support change priority of failover group
+# 7. refresh record_id 
 
-'''
-SC-1:~ # immlist -c OtpdiaDomain
 
-<< OtpdiaDomain - CONFIG >>
-realm : SA_STRING_T [1] {CONFIG, WRITEABLE, INITIALIZED}
-otpdiaDomain : SA_STRING_T [1] {RDN, CONFIG, INITIALIZED}
-host : SA_STRING_T [0..*] = Empty {CONFIG, WRITEABLE, MULTI_VALUE}
-SC-1:~ # immlist -c OtpdiaCons  
-
-<< OtpdiaCons - CONFIG >>
-tail : SA_NAME_T [0] = Empty {CONFIG, WRITEABLE}
-otpdiaCons : SA_STRING_T [1] {RDN, CONFIG, INITIALIZED}
-head : SA_NAME_T [1] {CONFIG, WRITEABLE, INITIALIZED}
-SC-1:~ # immlist -c OtpdiaSelector
-
-<< OtpdiaSelector - CONFIG >>
-service : SA_NAME_T [1..*] {CONFIG, WRITEABLE, INITIALIZED, MULTI_VALUE}
-peer : SA_NAME_T [1] {CONFIG, WRITEABLE, INITIALIZED}
-otpdiaSelector : SA_STRING_T [1] {RDN, CONFIG, INITIALIZED}
-destination : SA_NAME_T [0..*] = Empty {CONFIG, WRITEABLE, MULTI_VALUE}
-applicationId : SA_UINT32_T [0..*] = Empty {CONFIG, WRITEABLE, MULTI_VALUE}
-
-'''
-
-ATTRIBUTE_HAS_MULTI_VALUE = ("host",) # "service", "destination", "applicationId" )
+ATTRIBUTE_HAS_MULTI_VALUE = ("host", "applicationId") #, "destination",  )
 
 
 class OtpdiaObject(object):
@@ -66,18 +50,12 @@ class OtpdiaObject(object):
          
     
 class Selector(OtpdiaObject):   
-    def __init__(self):
-        self.application_id = 0
-        self.destination = None
-        self.peer = None
-        self.service = ""
-        self.key_value_pairs={}
         
     def parse(self, text):
-        
+        self.key_value_pairs={}
         super(Selector,self).parse(text)
             
-        self.application_id = self.key_value_pairs['applicationId']
+        self.app = self.key_value_pairs['applicationId']
         self.service = self.key_value_pairs['service']
         self.destination = self.key_value_pairs['destination']
         self.peer = self.key_value_pairs['peer']
@@ -89,17 +67,12 @@ class Selector(OtpdiaObject):
         return ("service='%s'\n"
         "applicationId='%s'\n"
         "destination='%s'\n"
-        "peer='%s'\n" %(self.service, self.application_id, self.destination, self.peer))
+        "peer='%s'\n" %(self.service, self.app, self.destination, self.peer))
         
     
-class Link(OtpdiaObject):
-
-    def __init__(self):
-        self.data = None
-        self.next = None
-        self.key_value_pairs={} 
-        
+class Link(OtpdiaObject):        
     def parse(self, text):
+        self.key_value_pairs={} 
         super(Link,self).parse(text)
                     
         self.data = self.key_value_pairs['head']
@@ -113,14 +86,9 @@ class Link(OtpdiaObject):
         "next='%s'\n" %(self.data, self.next))
         
 
-class Domain(OtpdiaObject):
-    
-    def __init__(self):
-        self.realm = ""
-        self.host = ""
-        self.key_value_pairs={}
-    
+class Domain(OtpdiaObject):    
     def parse(self, text):
+        self.key_value_pairs={}
         super(Domain,self).parse(text)
             
         self.realm = self.key_value_pairs['realm']
@@ -140,8 +108,19 @@ class Domain(OtpdiaObject):
         else:
             realm = self.realm
             
-        return ("(%s , %s)" %(host, realm))
+        return ("host = %s,  realm = %s" %(host, realm))
 
+class OtpdiaObjectFactory(object):
+    @staticmethod
+    def create(class_name):
+        if class_name == "OtpdiaSelector":
+            return Selector()
+        elif class_name == "OtpdiaCons":
+            return Link()
+        elif class_name == "OtpdiaDomain":
+            return Domain()
+        else:
+            return None
 
 class IMMCFG():
     def __init__(self):
@@ -164,9 +143,10 @@ class IMMCFG():
         print cmd_create
         run_command(cmd_create)
         
-        cmd_set = "immcfg -a app=%s %s" %(app,rdn)
-        print cmd_set
-        run_command(cmd_set)
+        for each in app:
+            cmd_set = "immcfg -a app+=%s %s" %(each,rdn)
+            print cmd_set
+            run_command(cmd_set)
     
     def add_otpdiacons(self, domain):
         rdn =  "otpdiaCons=link_to_" + domain.host+"_" + domain.realm
@@ -190,9 +170,22 @@ class IMMCFG():
         cmd_set = "immcfg -a host=%s %s" %(host,rdn)
         print cmd_set
         run_command(cmd_set)
+        
+    
+    
+    def load(self, class_name="OtpdiaSelector"):
+        dict_={}
+        command = "immfind -c " + class_name 
+        for line in run_command(command):
+            cmd = "immlist "+line
+            
+            text = run_command(cmd)
+            s = OtpdiaObjectFactory.create(class_name).parse(text)
+            dict_[line.rstrip()]=s
+        return dict_
     
 
-class IMMDB(object):
+class IMM(object):
     def __init__(self):
         self.selectors={}
         self.links={}
@@ -201,48 +194,10 @@ class IMMDB(object):
         
     
     def load(self):
-        self.selector=self.load_selector()
-        self.links = self.load_link()
-        self.domains = self.load_domain()
+        self.selector=self.immcfg.load_selector("OtpdiaSelector")
+        self.links = self.immcfg.load_link("OtpdiaCons")
+        self.domains = self.immcfg.load_domain("OtpdiaDomain")
     
-
-    def find_selector(self, rdn):
-        return self.selectors[rdn]
-    
-    def find_link(self, rdn):
-        return self.links[rdn]
-    
-    def find_domain(self,rdn):
-        return self.domains[rdn]
-    
-    def load_selector(self):
-        command = "immfind | grep otpdiaSelector"
-        for line in run_command(command):
-            cmd = "immlist "+line
-            
-            text = run_command(cmd)
-            s = Selector().parse(text)
-            self.selectors[line.rstrip()]=s
-            
-            
-    def load_link(self):
-        command = "immfind | grep otpdiaCons"
-        for line in run_command(command):
-            cmd = "immlist "+line
-            
-            text = run_command(cmd)
-            s = Link().parse(text)
-            self.links[line.rstrip()]=s
-            
-    
-    def load_domain(self):
-        command = "immfind | grep otpdiaDomain"
-        for line in run_command(command):
-            cmd = "immlist "+line
-            
-            text = run_command(cmd)
-            s = Domain().parse(text)
-            self.domains[line.rstrip()]=s
      
     def sizeof_links(self, link_head):
         
@@ -272,7 +227,7 @@ class IMMDB(object):
     def add_selector(self, app, dest, peer):
         s = Selector()
         
-        s.application_id = app
+        s.app = app
         s.destination = dest.rdn
         s.peer = peer.rdn
         s.rdn = ("otpdiaSelector=%s_%s" %(''.join(dest.host), dest.realm) )
@@ -285,7 +240,11 @@ class IMMDB(object):
             
     def add_domain(self,host, realm):
         d = Domain()
-        d.rdn = ("otpdiaDomain=%s_%s" %(''.join(host), realm))
+        
+        if len(host) == 0 or host[0] == NULL_VALUE:
+            d.rdn = ("otpdiaDomain=_%s" %(realm))
+        else:
+            d.rdn = ("otpdiaDomain=%s_%s" %(''.join(host), realm))
         d.host = host
         d.realm = realm
         
@@ -319,11 +278,11 @@ class IMMDB(object):
 
 
 class RouteRecord(object):
-    def __init__(self, selector, dest, peer, priority):
+    def __init__(self, record_id, selector, dest, peer, priority):
         
+        self.record_id = record_id
         self.selector = selector
-        
-        self.app = selector.application_id
+        self.app = selector.app
         self.dest = dest 
         self.peer = peer
         self.priority = priority
@@ -338,6 +297,7 @@ class RouteTable(object):
         self.imm = imm
         
         self.records=[]
+        record_id = 1
         for selector in self.imm.selectors.values():
             
             link = self.imm.links[selector.peer]
@@ -346,11 +306,14 @@ class RouteTable(object):
             while True:
                 domain_dest = self.imm.domains[selector.destination]
                 
-                record = RouteRecord(selector, 
+                record = RouteRecord(record_id,
+                                     selector, 
                                      domain_dest, 
                                      link,
                                      priority)
                 
+                record_id += 1
+                 
                 self.records.append(record)
                 
                 if link.next == NULL_VALUE: 
@@ -359,25 +322,49 @@ class RouteTable(object):
                     link = self.imm.links[link.next]
                     priority +=1
                     
+        self.last_record_id = record_id
         
-    def to_string(self):
-        head = "| app |" +" "*15 + "dest" + " "*15 + "|" + " "*15 + "peer" + " "*15 + "| priority \n"
+    def to_string(self, f="TABLE"):
+        if f == "TABLE":
+            return self.to_table()
+        else:
+            return self.to_text()
+        
+    
+    def to_table(self):
+        head = "| id |  app  |" +" "*15 + "dest" + " "*15 + "|" + " "*15 + "peer" + " "*15 + "| priority \n"
         line_separator = "|" + "-"*len(head) + "|\n"
         
         str_ = "Route Table:  \n"
         str_ += line_separator + head + line_separator
 
         for record in self.records:
-            str_ += ("|%5s|%-34s|%-34s|%10d\n"
-                        %(TO_APP_NAME[record.app],
+            str_ += ("|%4d|%7s|%-34s|%-34s|%10d\n"
+                        %(record.record_id, ' '.join([TO_APP_NAME[each] for each in record.app]),
                         record.dest.to_string(),
                         self.imm.domains[record.peer.data].to_string(),
                         record.priority)
                     )
+            
             str_ += line_separator
              
         return str_
 
+    def to_text(self):
+        line_separator = "" + "-"*32 + "\n"
+        
+        str_ = "Route Table Text:  \n"
+
+        for record in self.records:
+            str_ += line_separator 
+            str_ += "id:       " + str(record.record_id) + '\n'
+            str_ += "app:      " + (' '.join([TO_APP_NAME[each] for each in record.app])) + "\n"
+            str_ += "dest:     " + record.dest.to_string() + '\n'
+            str_ += "peer:     " + self.imm.domains[record.peer.data].to_string() + '\n'
+            str_ += "priority: " + str(record.priority) +'\n'
+            str_ += "\n"
+             
+        return str_
 
     def rm(self, app, dest, peer):
                 
@@ -400,7 +387,8 @@ class RouteTable(object):
         
         selector = self.imm.add_selector(app, d1, link)
         
-        record = RouteRecord(selector, d1, link, 3)
+        self.last_record_id += 1
+        record = RouteRecord(self.last_record_id, selector, d1, link, 3)
         
         self.records.append(record)
         
@@ -413,7 +401,16 @@ class RouteTable(object):
         self.imm.rm_selector(record.selector.rdn)
         self.imm.rm_link(record.peer.rdn)
         self.imm.rm_domain(record.dest.rdn)           
-                
+    
+    def rm_by_id(self, record_id):
+        for record in self.records:
+            if record.record_id == record_id:
+                self.rm_one_record(record)
+                return
+        
+        print "ERROR: no record found with id " + str(record_id)
+        
+             
                     
 
 def run_command(command):
@@ -427,13 +424,13 @@ def run_command(command):
 
 
 def list_route_table():
-    imm = IMMDB()
+    imm = IMM()
     imm.load()
     route_table = RouteTable(imm.selectors,imm.link,imm.domains)
     print route_table.to_string()    
 
 def add(args):
-    imm = IMMDB()
+    imm = IMM()
     imm.load()
     if not args.host:
         host = 'wildcard'
@@ -447,7 +444,7 @@ def add(args):
     imm.add_domain(host, args.realm)
 
 def rm(args):
-    imm = IMMDB()
+    imm = IMM()
     imm.load()
     if not args.host:
         host = 'wildcard'
