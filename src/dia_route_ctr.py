@@ -194,9 +194,9 @@ class IMM(object):
         
     
     def load(self):
-        self.selector=self.immcfg.load_selector("OtpdiaSelector")
-        self.links = self.immcfg.load_link("OtpdiaCons")
-        self.domains = self.immcfg.load_domain("OtpdiaDomain")
+        self.selectors=self.immcfg.load("OtpdiaSelector")
+        self.links = self.immcfg.load("OtpdiaCons")
+        self.domains = self.immcfg.load("OtpdiaDomain")
     
      
     def sizeof_links(self, link_head):
@@ -271,10 +271,31 @@ class IMM(object):
         
         self.immcfg.rm_imm_object(rdn)
         
-    def rm_link(self, rdn):
+    def rm_link(self, h_rdn, rdn):
         
-        self.links.pop(rdn)
-        self.immcfg.rm_imm_object(rdn)
+        if self.sizeof_links(self.links[h_rdn]) == 1:
+            self.links.pop(rdn)
+            self.immcfg.rm_imm_object(rdn)
+            return NULL_VALUE
+            
+        if h_rdn == rdn: # link head
+            node = self.links.pop(rdn)
+            self.immcfg.rm_imm_object(rdn)
+            return node.next
+        # else
+        else:
+            pre_node = None
+            for each in self.links.values():
+                if each.next == rdn:
+                    pre_node = each 
+                    break
+            
+            node = self.links.pop(rdn)
+            self.immcfg.rm_imm_object(rdn)
+        
+            pre_node.next = node.next 
+            
+            return h_rdn
 
 
 class RouteRecord(object):
@@ -286,6 +307,18 @@ class RouteRecord(object):
         self.dest = dest 
         self.peer = peer
         self.priority = priority
+    
+    def rm(self, imm):
+        
+        imm.rm_selector(self.selector.rdn)
+        
+        link_head_rdn = imm.rm_link(self.selector.peer, self.peer.rdn)
+        
+        if self.selector.rdn in imm.selectors:
+            imm.selectors[self.selector.rdn].peer = link_head_rdn
+        
+        imm.rm_domain(self.dest.rdn) 
+    
     
     def to_string(self):
         pass
@@ -332,14 +365,15 @@ class RouteTable(object):
         
     
     def to_table(self):
-        head = "| id |  app  |" +" "*15 + "dest" + " "*15 + "|" + " "*15 + "peer" + " "*15 + "| priority \n"
+        head = "| id |  app  |" +" "*20 + "dest" + " "*20 + "|" + " "*20 + "peer" + " "*20 + "| priority \n"
+        
         line_separator = "|" + "-"*len(head) + "|\n"
         
         str_ = "Route Table:  \n"
         str_ += line_separator + head + line_separator
 
         for record in self.records:
-            str_ += ("|%4d|%7s|%-34s|%-34s|%10d\n"
+            str_ += ("|%4d|%7s|%-44s|%-44s|%10d\n"
                         %(record.record_id, ' '.join([TO_APP_NAME[each] for each in record.app]),
                         record.dest.to_string(),
                         self.imm.domains[record.peer.data].to_string(),
@@ -394,13 +428,10 @@ class RouteTable(object):
         
                 
     def rm_one_record(self, record):
-        # todo: adjust priority of remaining node
-        # 
-        self.records.remove(record)
+        record.rm(self.imm)
         
-        self.imm.rm_selector(record.selector.rdn)
-        self.imm.rm_link(record.peer.rdn)
-        self.imm.rm_domain(record.dest.rdn)           
+        # adjust priority of remaining record
+        self.records.remove(record)        
     
     def rm_by_id(self, record_id):
         for record in self.records:
@@ -411,8 +442,6 @@ class RouteTable(object):
         print "ERROR: no record found with id " + str(record_id)
         
              
-                    
-
 def run_command(command):
     p = subprocess.Popen(command,
                          shell=True,
@@ -423,11 +452,11 @@ def run_command(command):
 
 
 
-def list_route_table():
+def list_route_table(output_format):
     imm = IMM()
     imm.load()
-    route_table = RouteTable(imm.selectors,imm.link,imm.domains)
-    print route_table.to_string()    
+    route_table = RouteTable(imm)
+    print route_table.to_string(output_format)    
 
 def add(args):
     imm = IMM()
@@ -462,10 +491,11 @@ if __name__ == "__main__":
     parser.add_argument("--cmd",  choices=('list', 'add', 'rm'))
     parser.add_argument("--host")
     parser.add_argument("--realm")
+    parser.add_argument("--format", default="TABLE")
     args = parser.parse_args()
 
     if args.cmd == "list" :
-        list_route_table()
+        list_route_table(args.format)
     elif args.cmd == "add" :
         add(args)
     elif args.cmd == "rm":

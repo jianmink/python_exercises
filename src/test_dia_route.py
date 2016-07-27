@@ -284,9 +284,31 @@ class TestRouteTable(unittest.TestCase):
         self.assertEqual(2, len(rt.imm.domains))
         self.assertEqual(1, len(rt.imm.links))
         self.assertEqual(1, len(rt.imm.selectors))
-
-
-
+        
+        print rt.imm.selectors.values()[0].to_string()
+        
+        self.assertEqual(rt.imm.links.values()[0].next, NULL_VALUE)
+        self.assertEqual(rt.imm.links.values()[0].data, 'otpdiaDomain=hss2_hss.com')
+        self.assertEqual(rt.imm.selectors.values()[0].peer, 'otpdiaCons=hss2_hss.com')
+        
+    def test_rt_rm_the_last_record(self):
+        print "test_rt_rm_the_last_record"
+         
+        rt = self.dm.create_route_table_w_hss_failover()
+        rt.rm_by_id(2)
+        print rt.to_string()
+         
+        self.assertEqual(2, len(rt.imm.domains))
+        self.assertEqual(1, len(rt.imm.links))
+        self.assertEqual(1, len(rt.imm.selectors))
+         
+        print rt.imm.selectors.values()[0].to_string()
+        
+        self.assertEqual(rt.imm.links.values()[0].next, NULL_VALUE)
+        self.assertEqual(rt.imm.links.values()[0].data, 'otpdiaDomain=hss1_hss.com')
+        self.assertEqual(rt.imm.selectors.values()[0].peer, 'otpdiaCons=hss1_hss.com')
+         
+    
 
 if __name__ == "__main__":
     unittest.main()
