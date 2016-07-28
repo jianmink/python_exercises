@@ -23,7 +23,7 @@ SC-1:~ # immlist -c OtpdiaSelector
 service : SA_NAME_T [1..*] {CONFIG, WRITEABLE, INITIALIZED, MULTI_VALUE}
 peer : SA_NAME_T [1] {CONFIG, WRITEABLE, INITIALIZED}
 otpdiaSelector : SA_STRING_T [1] {RDN, CONFIG, INITIALIZED}
-destination : SA_NAME_T [0..*] = Empty {CONFIG, WRITEABLE, MULTI_VALUE}
+dest : SA_NAME_T [0..*] = Empty {CONFIG, WRITEABLE, MULTI_VALUE}
 applicationId : SA_UINT32_T [0..*] = Empty {CONFIG, WRITEABLE, MULTI_VALUE}
 
 '''
@@ -32,7 +32,7 @@ class DataMama(object):
     def __init__(self):
         pass
     
-    def get_one_selector(self):
+    def get_selector(self):
         return  """
          immlist otpdiaSelector=selector_1 
             Name                                               Type         Value(s)
@@ -47,7 +47,7 @@ class DataMama(object):
             SaImmAttrAdminOwnerName                            SA_STRING_T  <Empty>
         """
 
-    def get_one_domain(self):
+    def get_domain(self):
         return """
         immlist otpdiaDomain=domain_hss 
         Name                                               Type         Value(s)
@@ -60,7 +60,7 @@ class DataMama(object):
         SaImmAttrAdminOwnerName                            SA_STRING_T  <Empty>
         """
     
-    def get_one_link_node(self):
+    def get_link(self):
         return """
         immlist otpdiaCons=con_hss 
         Name                                               Type         Value(s)
@@ -87,7 +87,7 @@ class DataMama(object):
         """  % (next_link_rdn, ''.join(domain.host), domain.realm, domain.rdn )  
         ) 
         
-        n = Link()
+        n = OtpdiaCons()
         n.parse(str_.split('\n'))
         
         return n
@@ -114,7 +114,7 @@ class DataMama(object):
         """ %( realm, rdn, host)
         )
         
-        d = Domain()
+        d = OtpdiaDomain()
         d.parse(str_.split('\n'))
         return d
      
@@ -134,20 +134,20 @@ class DataMama(object):
         """ %(peer.rdn, ''.join(dest.host), dest.realm, dest.rdn )
         )
         
-        s = Selector()
+        s = OtpdiaSelector()
         s.parse(str_.split('\n'))
         return s
     
     
     def create_route_table_with_one_record(self):
-        s = Selector()
-        s.parse(self.get_one_selector().split('\n'))
+        s = OtpdiaSelector()
+        s.parse(self.get_selector().split('\n'))
         
-        n = Link()
-        n.parse(self.get_one_link_node().split('\n'))
+        n = OtpdiaCons()
+        n.parse(self.get_link().split('\n'))
         
-        d = Domain()
-        d.parse(self.get_one_domain().split('\n'))
+        d = OtpdiaDomain()
+        d.parse(self.get_domain().split('\n'))
         
         imm = IMM() 
         imm.selectors = {s.rdn:s}
@@ -198,24 +198,24 @@ class TestLoadImmInfo(unittest.TestCase):
     dm = DataMama()
     
     def test_load_one_selector(self):
-        s = Selector()
-        s.parse(self.dm.get_one_selector().split('\n'))
+        s = OtpdiaSelector()
+        s.parse(self.dm.get_selector().split('\n'))
         print s.to_string()
-        self.assertTrue('16777265' in s.app)
-        self.assertEqual('otpdiaCons=con_hss', s.peer)
+        self.assertTrue('16777265' in s.applicationId)
+        self.assertEqual('otpdiaCons=con_hss', s.link_head)
         self.assertEqual('otpdiaDomain=domain_hss', s.destination)
         self.assertEqual('otpdiaSelector=selector_1', s.rdn)
         
     
     def test_load_one_link_node(self):
-        n = Link()
-        n.parse(self.dm.get_one_link_node().split('\n'))
+        n = OtpdiaCons()
+        n.parse(self.dm.get_link().split('\n'))
         self.assertEqual('<Empty>', n.next)
         self.assertEqual('otpdiaDomain=domain_hss', n.data)
         
     def test_load_one_domain(self):
-        d = Domain()
-        d.parse(self.dm.get_one_domain().split('\n'))
+        d = OtpdiaDomain()
+        d.parse(self.dm.get_domain().split('\n'))
         self.assertEqual(['hss1',], d.host)
         self.assertEqual('hss.com', d.realm)
     
@@ -229,7 +229,7 @@ class TestRouteTable(unittest.TestCase):
         
     def test_rm_one_record(self):
         rt = self.dm.create_route_table_with_one_record()
-        rt.rm("16777265", ("hss1", "hss.com"), ("hss1", "hss.com"))
+        rt.rm_by_route_items("16777265", ("hss1", "hss.com"), ("hss1", "hss.com"))
         print rt.to_string()
         
     def test_rt_hss_failover(self):
@@ -243,7 +243,7 @@ class TestRouteTable(unittest.TestCase):
     def test_rt_rm_record_with_low_priority(self):
         rt = self.dm.create_route_table_w_hss_failover()
         
-        rt.rm('16777265', ([NULL_VALUE,], 'hss.com'), (['hss2',], 'hss.com') )
+        rt.rm_by_route_items('16777265', ([NULL_VALUE,], 'hss.com'), (['hss2',], 'hss.com') )
         print rt.to_string()
     
     def test_rt_rm_record_with_high_priority(self):
@@ -252,7 +252,7 @@ class TestRouteTable(unittest.TestCase):
         
         rt = self.dm.create_route_table_w_hss_failover()
         
-        rt.rm(['16777265',], ([NULL_VALUE,], 'hss.com'), (['hss1',], 'hss.com') )
+        rt.rm_by_route_items(['16777265',], ([NULL_VALUE,], 'hss.com'), (['hss1',], 'hss.com') )
         print rt.to_string()
         
         self.assertEqual(2, len(rt.imm.domains))
@@ -266,7 +266,7 @@ class TestRouteTable(unittest.TestCase):
         
         rt = self.dm.create_route_table_w_hss_failover()
         
-        rt.add(['16777265','16777250'], ([NULL_VALUE,], 'hss.com'), (['hss3',], 'hss.com') )
+        rt.add(['16777265','16777250'], ([NULL_VALUE,], 'hss.com'), (['hss3','hss4'], 'hss.com') )
         print rt.to_string(f="TEXT")
         
         self.assertEqual(4, len(rt.imm.domains))
@@ -306,7 +306,7 @@ class TestRouteTable(unittest.TestCase):
         
         self.assertEqual(rt.imm.links.values()[0].next, NULL_VALUE)
         self.assertEqual(rt.imm.links.values()[0].data, 'otpdiaDomain=hss1_hss.com')
-        self.assertEqual(rt.imm.selectors.values()[0].peer, 'otpdiaCons=hss1_hss.com')
+        self.assertEqual(rt.imm.selectors.values()[0].link_head, 'otpdiaCons=hss1_hss.com')
          
     
 
