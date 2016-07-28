@@ -23,6 +23,7 @@ TO_APP_ID = {
 NULL_VALUE = "<Empty>"
 WILDCARD_SYMBOL = "*"
 IMMCFG_SLEEP_TIME = 0.1
+LOWEST_PRI = 999
 
 # function list:
 # 1. list route table
@@ -182,11 +183,11 @@ class IMMCFG():
         # dest: (host,realm)
         rdn = selector.rdn
         
-        cmd_create = 'immcfg -c OtpdiaSelector %s -a peer="%s" -a  service="%s"' %(rdn, selector.peer, self.SERVICE_DN )
+        cmd_create = 'immcfg -c OtpdiaSelector %s -a peer=%s -a  service="%s"' %(rdn, selector.link_head, self.SERVICE_DN )
         print cmd_create
         run_command(cmd_create)
         
-        for each in selector.apps:
+        for each in selector.applicationId:
             cmd_set = "immcfg -a apps+=%s %s" %(each,rdn)
             print cmd_set
             run_command(cmd_set)
@@ -195,8 +196,8 @@ class IMMCFG():
         print cmd_set
         run_command(cmd_set)
     
-    def add_otpdiacons(self, link, domain):
-        cmd_create = "immcfg -c OtpdiaCons %s -a head=%s" %(link.rdn, domain.rdn)
+    def add_otpdiacons(self, link_obj):
+        cmd_create = "immcfg -c OtpdiaCons %s -a head=%s" %(link_obj.rdn, link_obj.data)
         print cmd_create
         run_command(cmd_create)
     
@@ -215,6 +216,8 @@ class IMMCFG():
         run_command(cmd_create)
         
         for host in hosts:
+            if host == NULL_VALUE: continue
+            
             cmd_set = "immcfg -a host+=%s %s" %(host,rdn)
             print cmd_set
             run_command(cmd_set)
@@ -274,59 +277,36 @@ class IMM(object):
         
             
     
-    def add_selector(self, app, dest, peer):
-        s = OtpdiaSelector()
+    def add_selector(self, selector_obj):
         
-        s.applicationId = app
-        s.destination = dest.rdn
-        s.link_head = peer.rdn
-        s.rdn = ("otpdiaSelector=%s_%s" %(''.join(dest.host), dest.realm) )
+        rdn = selector_obj.rdn        
+        if rdn in self.selectors.keys():
+            return 
         
-        if s.rdn not in self.selectors.keys():
-            self.selectors[s.rdn] = s
-            self.immcfg.add_otpdiaselector(s)
-        
-        
-        return s
+        self.selectors[rdn] = selector_obj
+        self.immcfg.add_otpdiaselector(selector_obj)
         
             
-    def add_domain(self, hosts, realm):
+    def add_domain(self, domain_obj):
+        rdn = domain_obj.rdn
         
-        d = OtpdiaDomain()
+        if rdn in self.domains.keys():
+            return 
         
-        if len(hosts) == 0 or hosts[0] == NULL_VALUE or hosts[0] == WILDCARD_SYMBOL:
-            d.rdn = ("otpdiaDomain=_%s" %(realm))
-        else:
-            d.rdn = ("otpdiaDomain=%s_%s" %(''.join(hosts), realm))
+        self.domains[rdn] = domain_obj
         
-        d.host = hosts
-        d.realm = realm
-        
-        if d.rdn in self.domains.keys():
-            return self.domains[d.rdn]
-        
-        self.domains[d.rdn] = d
-        
-        self.immcfg.add_otpdiadomain(d)
-        
-        return d
+        self.immcfg.add_otpdiadomain(domain_obj)
         
          
-    def add_link(self, domain):
-        n = OtpdiaCons()
+    def add_link(self, link_obj):
         
-        n.rdn =("otpdiaCons=%s_%s" %(''.join(domain.host), domain.realm))
-        n.next = NULL_VALUE
-        n.data = domain.rdn
+        rdn = link_obj.rdn        
+        if rdn in self.links.keys():
+            return 
         
-        if n.rdn in self.links.keys():
-            return self.links[n.rdn]
+        self.links[rdn] = link_obj
+        self.immcfg.add_otpdiacons(link_obj)
         
-        self.links[n.rdn] = n
-        self.immcfg.add_otpdiacons(n, domain)
-        
-        return n
-    
     
     def rm_domain(self, rdn):
         
@@ -377,14 +357,15 @@ class IMM(object):
             
 
 class RouteRecord(object):
-    def __init__(self, record_id, selector, dest, link_rdn, peer, priority):
+    def __init__(self, record_id, selector, dest_obj, link_obj, peer_obj, priority):
         
         self.record_id = record_id
         self.selector = selector
         self.apps = selector.applicationId
-        self.dest = dest 
-        self.link_rdn = link_rdn 
-        self.peer_obj = peer
+        self.dest_obj = dest_obj 
+        self.link_obj = link_obj 
+        self.link_rdn = link_obj.rdn
+        self.peer_obj = peer_obj
         self.priority = priority
     
     def rm_imm_objects(self, imm):
@@ -392,17 +373,16 @@ class RouteRecord(object):
         imm.rm_link(self.selector, self.link_rdn)
         
     def add_imm_objects(self, imm):
-        pass
-#         imm.add_domain(self.dest)
-#         imm.add_domain(self.peer)
-#         imm.add_link(self.peer)
-#         imm.add_selector(self.selector)
+        imm.add_domain(self.dest_obj)
+        imm.add_domain(self.peer_obj)
+        imm.add_link(self.link_obj)
+        imm.add_selector(self.selector)
                 
     def to_string(self, imm):
         str_= ""
         str_ += "id:       " + str(self.record_id) + '\n'
         str_ += "app:      " + (' '.join([TO_APP_NAME[each] for each in self.apps])) + "\n"
-        str_ += "dest:     " + self.dest.to_string() + '\n'
+        str_ += "dest:     " + self.dest_obj.to_string() + '\n'
         str_ += "peer:     " + self.peer_obj.to_string() + '\n'
         str_ += "priority: " + str(self.priority) +'\n'
         str_ += "\n"
@@ -414,7 +394,7 @@ class RouteTable(object):
     def __init__(self, imm):
         self.imm = imm
         
-        self.records=[]
+        self.records={}
         record_id = 1
         for selector in self.imm.selectors.values():
             
@@ -422,18 +402,21 @@ class RouteTable(object):
             priority=1
             
             while True:
-                domain_dest = self.imm.domains[selector.destination]
+                dest_obj = self.imm.domains[selector.destination]
+                peer_obj = self.imm.domains[link.data]
                 
                 record = RouteRecord(record_id,
                                      selector, 
-                                     domain_dest, 
-                                     link.rdn,
-                                     self.imm.domains[link.data],
+                                     dest_obj, 
+                                     link,
+                                     peer_obj,
                                      priority)
                 
                 record_id += 1
                  
-                self.records.append(record)
+                k = self.hash(selector.applicationId,dest_obj.host, dest_obj.realm,peer_obj.host, peer_obj.realm)
+                
+                self.records[k] = record
                 
                 if link.next == NULL_VALUE: 
                     break 
@@ -442,7 +425,16 @@ class RouteTable(object):
                     priority +=1
                     
         self.last_record_id = record_id - 1
+    
+    def hash(self, apps, dest_host, dest_realm, peer_host, peer_realm):
+        k = ''.join(apps)
+        k += ''.join(dest_host)
+        k += dest_realm
+        k += ''.join(peer_host)
+        k += peer_realm
+        return k
         
+          
     def to_string(self, f="TABLE"):
         if f == "TABLE":
             return self.to_table()
@@ -458,10 +450,10 @@ class RouteTable(object):
         str_ = "Route Table:  \n"
         str_ += line_separator + head + line_separator
 
-        for record in self.records:
+        for record in self.records.values():
             str_ += ("|%4d|%7s|%-44s|%-44s|%10d\n"
                         %(record.record_id, ' '.join([TO_APP_NAME[each] for each in record.apps]),
-                        record.dest.to_string(),
+                        record.dest_obj.to_string(),
                         record.peer_obj.to_string(),
                         record.priority)
                     )
@@ -475,7 +467,7 @@ class RouteTable(object):
         
         str_ = "Route Table Text:  \n"
 
-        for record in self.records:
+        for record in self.records.values():
             str_ += line_separator 
             str_ += record.to_string(self.imm)
             str_ += "\n"
@@ -483,16 +475,17 @@ class RouteTable(object):
         return str_
 
     def rm_by_route_items(self, app, dest, peer):
+        
+        k = self.hash(app, dest[0], dest[1], peer[0], peer[1])
+        if k not in self.records.keys():
+            print "INFO: no route record found for " + k
+            return
+        
         # find
-        for record in self.records:
-            domain_d = record.dest
-            domain_p = record.peer_obj
-            if (record.apps == app and 
-                (domain_d.host, domain_d.realm) == dest and
-                (domain_p.host, domain_p.realm) == peer ):
-                self.rm_record(record)
+        
+        self.rm_record(self.records[k])
                 
-    def add(self, app, dest, peer):
+    def add(self, app, dest, peer, priority=LOWEST_PRI):
         
         self.last_record_id +=1
         rdn = "otpdiaSelector=%d" %(self.last_record_id)
@@ -535,38 +528,22 @@ class RouteTable(object):
             selector.link_head = link_rdn
             
             
-        record = RouteRecord(self.last_record_id, selector, dest_obj, link_rdn, peer_obj, self.last_record_id)
-        self.records.append(record)
+        record = RouteRecord(self.last_record_id, selector, dest_obj, link_obj, peer_obj, self.last_record_id)
+        
+        k = self.hash(app, dest_obj.host, dest_obj.realm, peer_obj.host, peer_obj.realm)
+        self.records[k] = record
         record.add_imm_objects(self.imm)              
-        
-#         # add selector.dest
-#         d1 = self.imm.add_domain(dest[0], dest[1])
-#         
-#         # add domain peer 
-#         d2 = self.imm.add_domain(peer[0], peer[1])
-#         
-#         # add link to domain peer
-#         link = self.imm.add_link(d2)
-#         
-#         # add selector 
-#         selector = self.imm.add_selector(app, d1, link)
-#         
-#         self.last_record_id += 1
-#         record = RouteRecord(self.last_record_id, selector, d1, link.rdn, d2, 3)
-#         
-#         self.records.append(record)
-#         
-#         record.add_imm_objects(self.imm)
-        
-                
+
     def rm_record(self, record):
         record.rm_imm_objects(self.imm)
         
         # adjust priority of remaining record
-        self.records.remove(record)        
+        for each in self.records.keys():
+            if self.records[each] ==  record:
+                self.records.pop(each)        
     
     def rm_by_id(self, record_id):
-        for record in self.records:
+        for record in self.records.values():
             if int(record.record_id) == record_id:
                 self.rm_record(record)
                 return
