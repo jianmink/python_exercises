@@ -37,6 +37,7 @@ IMMCFG_SLEEP_TIME = 0.1
 # support add/remove hss/dra into/from load-sharing group
 # support change priority of failover group
 # refresh record id and priority 
+# RouteTable use dict to maintain records, key is the combination of app, dest and peer info
 
 
 ATTRIBUTE_HAS_MULTI_VALUE = ("host", "applicationId") #, "dest",  )
@@ -376,31 +377,33 @@ class IMM(object):
             
 
 class RouteRecord(object):
-    def __init__(self, record_id, selector, dest, peer, priority):
+    def __init__(self, record_id, selector, dest, link_rdn, peer, priority):
         
         self.record_id = record_id
         self.selector = selector
         self.apps = selector.applicationId
         self.dest = dest 
-        self.peer = peer
+        self.link_rdn = link_rdn 
+        self.peer_obj = peer
         self.priority = priority
     
     def rm_imm_objects(self, imm):
         imm.rm_selector(self.selector.rdn)
-        imm.rm_link(self.selector, self.peer.rdn)
+        imm.rm_link(self.selector, self.link_rdn)
         
     def add_imm_objects(self, imm):
-        imm.add_domain(self.dest)
-        imm.add_domain(self.peer)
-        imm.add_link(self.peer)
-        imm.add_selector(self.selector)
+        pass
+#         imm.add_domain(self.dest)
+#         imm.add_domain(self.peer)
+#         imm.add_link(self.peer)
+#         imm.add_selector(self.selector)
                 
     def to_string(self, imm):
         str_= ""
         str_ += "id:       " + str(self.record_id) + '\n'
         str_ += "app:      " + (' '.join([TO_APP_NAME[each] for each in self.apps])) + "\n"
         str_ += "dest:     " + self.dest.to_string() + '\n'
-        str_ += "peer:     " + imm.domains[self.peer.data].to_string() + '\n'
+        str_ += "peer:     " + self.peer_obj.to_string() + '\n'
         str_ += "priority: " + str(self.priority) +'\n'
         str_ += "\n"
         return str_
@@ -424,7 +427,8 @@ class RouteTable(object):
                 record = RouteRecord(record_id,
                                      selector, 
                                      domain_dest, 
-                                     link,
+                                     link.rdn,
+                                     self.imm.domains[link.data],
                                      priority)
                 
                 record_id += 1
@@ -437,7 +441,7 @@ class RouteTable(object):
                     link = self.imm.links[link.next]
                     priority +=1
                     
-        self.last_record_id = record_id
+        self.last_record_id = record_id - 1
         
     def to_string(self, f="TABLE"):
         if f == "TABLE":
@@ -458,7 +462,7 @@ class RouteTable(object):
             str_ += ("|%4d|%7s|%-44s|%-44s|%10d\n"
                         %(record.record_id, ' '.join([TO_APP_NAME[each] for each in record.apps]),
                         record.dest.to_string(),
-                        self.imm.domains[record.peer.data].to_string(),
+                        record.peer_obj.to_string(),
                         record.priority)
                     )
             
@@ -482,29 +486,77 @@ class RouteTable(object):
         # find
         for record in self.records:
             domain_d = record.dest
-            domain_p = self.imm.domains[record.peer.data]
+            domain_p = record.peer_obj
             if (record.apps == app and 
                 (domain_d.host, domain_d.realm) == dest and
                 (domain_p.host, domain_p.realm) == peer ):
                 self.rm_record(record)
                 
     def add(self, app, dest, peer):
-        # add selector.dest
-        d1 = self.imm.add_domain(dest[0], dest[1])
         
-        # add domain peer 
-        d2 = self.imm.add_domain(peer[0], peer[1])
+        self.last_record_id +=1
+        rdn = "otpdiaSelector=%d" %(self.last_record_id)
         
-        # add link to domain peer
-        link = self.imm.add_link(d2)
+        # todo: check if new route record needs to create new selector object
+        if rdn in self.imm.selectors.keys():
+            selector = self.imm.selectors[rdn]
+            link_obj = self.imm.links[selector.link_head]
+            link_size = self.imm.sizeof_links(link_obj)
+        else:
+            selector = OtpdiaSelector()
+            selector.rdn = rdn
+            selector.link_head = None
+            selector.destination = None
+            link_size = 0
         
-        # add selector 
-        selector = self.imm.add_selector(app, d1, link)
+        peer_rdn = "OtpdiaDomain=peer_%d.%d" %(self.last_record_id, link_size+1)
+        peer_obj = OtpdiaDomain()
+        peer_obj.rdn = peer_rdn
+        peer_obj.host = peer[0]
+        peer_obj.realm = peer[1] 
         
-        self.last_record_id += 1
-        record = RouteRecord(self.last_record_id, selector, d1, link, 3)
+        link_rdn = "OtpdiaCons=%d.%d" %(self.last_record_id, link_size+1)
+        link_obj = OtpdiaCons()
+        link_obj.rdn = link_rdn
+        link_obj.data = peer_rdn
+        link_obj.next = NULL_VALUE
+
         
+        if selector.destination :
+            print "TODO: insert new detination into exist selector" 
+        else:
+            dest_rdn = "OtpdiaDomain=dest_%d.%d" %(self.last_record_id, link_size+1)
+            dest_obj = OtpdiaDomain()
+            dest_obj.rdn = dest_rdn
+            dest_obj.host = dest[0]
+            dest_obj.realm = dest[1]
+            selector.destination = dest_rdn
+            selector.applicationId=app
+            selector.link_head = link_rdn
+            
+            
+        record = RouteRecord(self.last_record_id, selector, dest_obj, link_rdn, peer_obj, self.last_record_id)
         self.records.append(record)
+        record.add_imm_objects(self.imm)              
+        
+#         # add selector.dest
+#         d1 = self.imm.add_domain(dest[0], dest[1])
+#         
+#         # add domain peer 
+#         d2 = self.imm.add_domain(peer[0], peer[1])
+#         
+#         # add link to domain peer
+#         link = self.imm.add_link(d2)
+#         
+#         # add selector 
+#         selector = self.imm.add_selector(app, d1, link)
+#         
+#         self.last_record_id += 1
+#         record = RouteRecord(self.last_record_id, selector, d1, link.rdn, d2, 3)
+#         
+#         self.records.append(record)
+#         
+#         record.add_imm_objects(self.imm)
         
                 
     def rm_record(self, record):
