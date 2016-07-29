@@ -29,7 +29,8 @@ LOWEST_PRI = 999
 # 1. list route table
 # 2. list route record in text mode
 # 3. rm route record by record id
-# 4. add route record
+# 4. add new route record
+
 
 # todo list
 # support multiple value of otpdiaSelector.dest 
@@ -39,7 +40,6 @@ LOWEST_PRI = 999
 # support change priority of failover group
 # refresh record id and priority 
 # RouteTable use dict to maintain records, key is the combination of app, dest and peer info
-
 
 ATTRIBUTE_HAS_MULTI_VALUE = ("host", "applicationId") #, "dest",  )
 
@@ -156,25 +156,15 @@ class IMMCFG():
     def __init__(self):
         self.SERVICE_DN="otpdiaService=epc_aaa,otpdiaProduct=AAAServer"
     
-    def rm_imm_object(self, rdn, time_wait=0):
+    def rm_imm_object(self, rdn):
         cmd_rm = "immcfg -d " + rdn
         print cmd_rm
-        
-        if time_wait != 0: time.sleep(time_wait)
-        
-        output = run_command(cmd_rm)
-        if output and "ERR_BAD_OPERATIONself" in ''.join(output):
-            if time_wait != 0: time.sleep(time_wait)
-            run_command(cmd_rm)
-        
-        for each in output:
-            print each
+        run_command(cmd_rm)
         
     def modify_imm_object(self,rdn,key, value):
         if value == NULL_VALUE: 
             value = ''
         cmd = "immcfg -a %s=%s %s" %(key, value, rdn)
-        print cmd
         
         run_command(cmd)
     
@@ -184,21 +174,17 @@ class IMMCFG():
         rdn = selector.rdn
         
         cmd_create = 'immcfg -c OtpdiaSelector %s -a peer=%s -a  service="%s"' %(rdn, selector.link_head, self.SERVICE_DN )
-        print cmd_create
         run_command(cmd_create)
         
         for each in selector.applicationId:
-            cmd_set = "immcfg -a apps+=%s %s" %(each,rdn)
-            print cmd_set
+            cmd_set = "immcfg -a applicationId+=%s %s" %(each,rdn)
             run_command(cmd_set)
             
         cmd_set = "immcfg -a destination+=%s %s" %(selector.destination,rdn)
-        print cmd_set
         run_command(cmd_set)
     
     def add_otpdiacons(self, link_obj):
         cmd_create = "immcfg -c OtpdiaCons %s -a head=%s" %(link_obj.rdn, link_obj.data)
-        print cmd_create
         run_command(cmd_create)
     
     
@@ -212,14 +198,12 @@ class IMMCFG():
         realm = domain.realm
         
         cmd_create = "immcfg -c OtpdiaDomain %s -a realm=%s" %(rdn, realm)
-        print cmd_create
         run_command(cmd_create)
         
         for host in hosts:
-            if host == NULL_VALUE: continue
+            if host == NULL_VALUE or not host: continue
             
             cmd_set = "immcfg -a host+=%s %s" %(host,rdn)
-            print cmd_set
             run_command(cmd_set)
         
     
@@ -330,7 +314,7 @@ class IMM(object):
             
             self.immcfg.modify_imm_object(selector.rdn, "peer", node.next )
             
-            self.immcfg.rm_imm_object(rdn, IMMCFG_SLEEP_TIME)
+            self.immcfg.rm_imm_object(rdn)
                 
             self.rm_domain(node.data)
             
@@ -349,7 +333,7 @@ class IMM(object):
             
             # issue: Validation error (BAD_OPERATION) reported by implementer 'C-diameter', if immcfd -d immediatelly 
             # the workaround is to sleep and retry
-            self.immcfg.rm_imm_object(rdn, IMMCFG_SLEEP_TIME)
+            self.immcfg.rm_imm_object(rdn)
             
             self.rm_domain(node.data)
         
@@ -450,8 +434,14 @@ class RouteTable(object):
         str_ = "Route Table:  \n"
         str_ += line_separator + head + line_separator
 
+        tmp = {}
         for record in self.records.values():
-            str_ += ("|%4d|%7s|%-44s|%-44s|%10d\n"
+            # sort by record id
+            tmp[record.record_id] = record
+            
+        for k in sorted(tmp.keys()):
+            record = tmp[k]
+            str_ += ("|%4d|%8s|%-44s|%-44s|%10d\n"
                         %(record.record_id, ' '.join([TO_APP_NAME[each] for each in record.apps]),
                         record.dest_obj.to_string(),
                         record.peer_obj.to_string(),
@@ -467,7 +457,13 @@ class RouteTable(object):
         
         str_ = "Route Table Text:  \n"
 
+        tmp = {}
         for record in self.records.values():
+            # sort by record id
+            tmp[record.record_id] = record
+            
+        for k in sorted(tmp.keys()):
+            record = tmp[k]
             str_ += line_separator 
             str_ += record.to_string(self.imm)
             str_ += "\n"
@@ -502,13 +498,13 @@ class RouteTable(object):
             selector.destination = None
             link_size = 0
         
-        peer_rdn = "OtpdiaDomain=peer_%d.%d" %(self.last_record_id, link_size+1)
+        peer_rdn = "otpdiaDomain=peer_%d.%d" %(self.last_record_id, link_size+1)
         peer_obj = OtpdiaDomain()
         peer_obj.rdn = peer_rdn
         peer_obj.host = peer[0]
         peer_obj.realm = peer[1] 
         
-        link_rdn = "OtpdiaCons=%d.%d" %(self.last_record_id, link_size+1)
+        link_rdn = "otpdiaCons=%d.%d" %(self.last_record_id, link_size+1)
         link_obj = OtpdiaCons()
         link_obj.rdn = link_rdn
         link_obj.data = peer_rdn
@@ -518,7 +514,7 @@ class RouteTable(object):
         if selector.destination :
             print "TODO: insert new detination into exist selector" 
         else:
-            dest_rdn = "OtpdiaDomain=dest_%d.%d" %(self.last_record_id, link_size+1)
+            dest_rdn = "otpdiaDomain=dest_%d.%d" %(self.last_record_id, link_size+1)
             dest_obj = OtpdiaDomain()
             dest_obj.rdn = dest_rdn
             dest_obj.host = dest[0]
@@ -550,13 +546,37 @@ class RouteTable(object):
         
         print "ERROR: no record found with id " + str(record_id)
         
-             
-def run_command(command):
+        
+def run_command(command, time_wait = IMMCFG_SLEEP_TIME, retry = 1):
+    if time_wait != 0: time.sleep(time_wait)
+        
+    output = run_command_(command)
+    if output and "ERR_BAD_OPERATIONself" in ''.join(output):
+        if time_wait != 0: time.sleep(time_wait)
+        output = run_command_(command)
+    
+    return output
+                      
+def run_command_(command):
+    print command
     p = subprocess.Popen(command,
                          shell=True,
                          stdout=subprocess.PIPE,
                          stderr=subprocess.STDOUT)
-    return iter(p.stdout.readline, b'')
+    
+    rtn = ''
+    while True:
+        out = p.stdout.read(1)
+        if out == '' and p.poll() != None:
+            break
+        if out != '':
+            rtn += out
+    
+    if 'error' in rtn:
+        print rtn
+    
+    return rtn.split('\n')[:-1]
+#     return 
 
 
 
@@ -582,7 +602,7 @@ def add(args):
         print "please provide apps, e.g. SWx"
         return 
     
-    appid = [TO_APP_ID(app),]
+    appid = [TO_APP_ID[app],]
     
     host, realm = args.dest[1:-1].split(',')
     
