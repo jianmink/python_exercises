@@ -4,6 +4,9 @@ import unittest
 from dia_route_ctr import *
 
 
+
+# IMMCFG_SLEEP_TIME = 0
+
 '''
 SC-1:~ # immlist -c OtpdiaDomain
 
@@ -32,47 +35,6 @@ class DataMama(object):
     def __init__(self):
         pass
     
-    def get_selector(self):
-        return  """
-         immlist otpdiaSelector=selector_1 
-            Name                                               Type         Value(s)
-            ========================================================================
-            service                                            SA_NAME_T    otpdiaService=epc_aaa,otpdiaProduct=AAAServer (45) 
-            peer                                               SA_NAME_T    otpdiaCons=con_hss (18) 
-            otpdiaSelector                                     SA_STRING_T  otpdiaSelector=selector_1 
-            destination                                        SA_NAME_T    otpdiaDomain=domain_hss (23) 
-            applicationId                                      SA_UINT32_T  16777265 (0x1000031)
-            SaImmAttrImplementerName                           SA_STRING_T  C-diameter 
-            SaImmAttrClassName                                 SA_STRING_T  OtpdiaSelector 
-            SaImmAttrAdminOwnerName                            SA_STRING_T  <Empty>
-        """
-
-    def get_domain(self):
-        return """
-        immlist otpdiaDomain=domain_hss 
-        Name                                               Type         Value(s)
-        ========================================================================
-        realm                                              SA_STRING_T  hss.com 
-        otpdiaDomain                                       SA_STRING_T  otpdiaDomain=domain_hss 
-        host                                               SA_STRING_T  hss1
-        SaImmAttrImplementerName                           SA_STRING_T  C-diameter 
-        SaImmAttrClassName                                 SA_STRING_T  OtpdiaDomain 
-        SaImmAttrAdminOwnerName                            SA_STRING_T  <Empty>
-        """
-    
-    def get_link(self):
-        return """
-        immlist otpdiaCons=con_hss 
-        Name                                               Type         Value(s)
-        ========================================================================
-        tail                                               SA_NAME_T    <Empty>
-        otpdiaCons                                         SA_STRING_T  otpdiaCons=con_hss 
-        head                                               SA_NAME_T    otpdiaDomain=domain_hss (23) 
-        SaImmAttrImplementerName                           SA_STRING_T  C-diameter 
-        SaImmAttrClassName                                 SA_STRING_T  OtpdiaCons 
-        SaImmAttrAdminOwnerName                            SA_STRING_T  <Empty>
-        """   
-        
     def create_link_object(self, domain, next_link_rdn="<Empty>"):
         str_ = ("""
         immlist otpdiaCons=con_hss 
@@ -84,7 +46,7 @@ class DataMama(object):
         SaImmAttrImplementerName                           SA_STRING_T  C-diameter 
         SaImmAttrClassName                                 SA_STRING_T  OtpdiaCons 
         SaImmAttrAdminOwnerName                            SA_STRING_T  <Empty>
-        """  % (next_link_rdn, ''.join(domain.host), domain.realm, domain.rdn )  
+        """  % (next_link_rdn, ''.join(domain.hosts), domain.realm, domain.rdn )  
         ) 
         
         n = OtpdiaCons()
@@ -131,31 +93,12 @@ class DataMama(object):
             SaImmAttrImplementerName                           SA_STRING_T  C-diameter 
             SaImmAttrClassName                                 SA_STRING_T  OtpdiaSelector 
             SaImmAttrAdminOwnerName                            SA_STRING_T  <Empty>
-        """ %(peer.rdn, ''.join(dest.host), dest.realm, dest.rdn )
+        """ %(peer.rdn, ''.join(dest.hosts), dest.realm, dest.rdn )
         )
         
         s = OtpdiaSelector()
         s.parse(str_.split('\n'))
         return s
-    
-    
-    def create_route_table_with_one_record(self):
-        s = OtpdiaSelector()
-        s.parse(self.get_selector().split('\n'))
-        
-        n = OtpdiaCons()
-        n.parse(self.get_link().split('\n'))
-        
-        d = OtpdiaDomain()
-        d.parse(self.get_domain().split('\n'))
-        
-        imm = IMM() 
-        imm.selectors = {s.rdn:s}
-        imm.links = {n.rdn:n}
-        imm.domains = {d.rdn:d}
-        rt = RouteTable(imm)
-        
-        return rt  
     
     def create_route_table_w_hss_failover(self):
         d1 = self.create_domain_object(("hss1",), "hss.com")
@@ -167,10 +110,11 @@ class DataMama(object):
         
         s = self.create_selector_object(d, link_node1)
         
-        imm = IMM() 
-        imm.selectors = {s.rdn:s}
-        imm.links = {link_node1.rdn:link_node1, link_node2.rdn:link_node2}
-        imm.domains = {d1.rdn:d1, d2.rdn:d2, d.rdn:d}
+        selector_map = {s.rdn:s}
+        node_map = {link_node1.rdn:link_node1, link_node2.rdn:link_node2}
+        domain_map = {d1.rdn:d1, d2.rdn:d2, d.rdn:d}
+        
+        imm = IMM(selector_map, node_map, domain_map) 
         rt = RouteTable(imm)
         
         return rt
@@ -179,150 +123,168 @@ class DataMama(object):
         
         #host                                               SA_STRING_T  hss3 hss4 
         d1 = self.create_domain_object(("hss1", "hss2"), "hss.com")
-        d = self.create_domain_object((NULL_VALUE,) , "hss.com")
+        d = self.create_domain_object(() , "hss.com")
         
         link_node1 = self.create_link_object(d1)
         
         s = self.create_selector_object(d, link_node1)
         
-        imm = IMM() 
-        imm.selectors = {s.rdn:s}
-        imm.links = {link_node1.rdn:link_node1}
-        imm.domains = {d1.rdn:d1, d.rdn:d}
+        selector_map = {s.rdn:s}
+        node_map = {link_node1.rdn:link_node1}
+        domain_map = {d1.rdn:d1, d.rdn:d}
+        
+        imm = IMM(selector_map, node_map, domain_map)
         rt = RouteTable(imm)
         
         return rt
         
-
-class TestLoadImmInfo(unittest.TestCase):
-    dm = DataMama()
-    
-    def test_load_one_selector(self):
-        s = OtpdiaSelector()
-        s.parse(self.dm.get_selector().split('\n'))
-        print s.to_string()
-        self.assertTrue('16777265' in s.applicationId)
-        self.assertEqual('otpdiaCons=con_hss', s.link_head)
-        self.assertEqual('otpdiaDomain=domain_hss', s.destination)
-        self.assertEqual('otpdiaSelector=selector_1', s.rdn)
-        
-    
-    def test_load_one_link_node(self):
-        n = OtpdiaCons()
-        n.parse(self.dm.get_link().split('\n'))
-        self.assertEqual('<Empty>', n.next)
-        self.assertEqual('otpdiaDomain=domain_hss', n.data)
-        
-    def test_load_one_domain(self):
-        d = OtpdiaDomain()
-        d.parse(self.dm.get_domain().split('\n'))
-        self.assertEqual(['hss1',], d.host)
-        self.assertEqual('hss.com', d.realm)
-    
         
 class TestRouteTable(unittest.TestCase):
     dm = DataMama()
-    
-    def test_list_route_table(self):
-        rt = self.dm.create_route_table_with_one_record()
-        print rt.to_string()
         
-    def test_rm_one_record(self):
-        rt = self.dm.create_route_table_with_one_record()
-        rt.rm_by_route_items("16777265", ("hss1", "hss.com"), ("hss1", "hss.com"))
-        print rt.to_string()
-        
-    def test_rt_hss_failover(self):
-        print "test_rt_hss_failover"
+    def test_has_two_route_records_for_hss_failover(self):
+        print "\ntest_link_size_is_two_for_hss_failover"
         rt = self.dm.create_route_table_w_hss_failover()
-        print rt.to_string()
         
-    def test_rt_hss_loadsharing(self):
+        self.assertEqual(2, len(rt.records))
+        self.assertEqual(1, len(rt.imm.selector_map.values()))
+        
+        s = rt.imm.selector_map.values()[0]
+        self.assertEqual("otpdiaDomain=_hss.com", s.dest_rdn)
+        self.assertEqual(2, s.link_size)
+                
+        print rt.to_string("TEXT")
+        
+    def test_has_one_route_record_for_hss_loadsharing(self):
+        print "\ntest_has_one_route_record_for_hss_loadsharing"
+        
         rt = self.dm.create_route_table_w_hss_loadsharing()
-        print rt.to_string()
-             
-    def test_rt_rm_record_with_low_priority(self):
-        rt = self.dm.create_route_table_w_hss_failover()
         
-        rt.rm_by_route_items('16777265', ([NULL_VALUE,], 'hss.com'), (['hss2',], 'hss.com') )
+        self.assertEqual(1, len(rt.records))
+        self.assertEqual(1, len(rt.imm.selector_map.values()))
+        
+        s = rt.imm.selector_map.values()[0]
+        self.assertEqual("otpdiaCons=hss1hss2_hss.com", s.link_head_rdn)
+        self.assertEqual(1, s.link_size)
+                
         print rt.to_string()
+        
+              
+    def test_rt_size_1_after_rm_record_with_low_priority(self):
+        print "\ntest_rt_size_1_after_rm_record_with_low_priority"
+        
+        rt = self.dm.create_route_table_w_hss_failover()
+         
+        rt.rm_by_id(2)
+        
+        self.assertEqual(1, len(rt.records))
+        
+        self.assertEqual(2, len(rt.imm.domain_map))
+        self.assertEqual(1, len(rt.imm.node_map))
+        self.assertEqual(1, len(rt.imm.selector_map))
+          
+        s = rt.imm.selector_map.values()[0]
+        print s.to_string()
+         
+        n = rt.imm.node_map.values()[0]
+         
+        self.assertEqual(n.next, NULL_VALUE)
+        self.assertEqual(n.data, 'otpdiaDomain=hss1_hss.com')
+        self.assertEqual(s.link_head_rdn, 'otpdiaCons=hss1_hss.com')
+        
+     
+    def test_rt_size_1_after_rm_record_with_high_priority(self):
+         
+        print "\ntest__rt_size_1_after_rm_record_with_high_priority"
+         
+        rt = self.dm.create_route_table_w_hss_failover()
+         
+#         rt.rm_by_route_items(['16777265',], ([NULL_VALUE,], 'hss.com'), (['hss1',], 'hss.com') )
+        rt.rm_by_id(1)
+        print rt.to_string()
+         
+        self.assertEqual(2, len(rt.imm.domain_map))
+        self.assertEqual(1, len(rt.imm.node_map))
+        self.assertEqual(1, len(rt.imm.selector_map))
+        
+         
+        print rt.imm.selector_map.values()[0].to_string()
+         
+        self.assertEqual(rt.imm.node_map.values()[0].next, NULL_VALUE)
+        self.assertEqual(rt.imm.node_map.values()[0].data, 'otpdiaDomain=hss2_hss.com')
+        self.assertEqual(rt.imm.selector_map.values()[0].link_head_rdn, 'otpdiaCons=hss2_hss.com')
+        
+        
+    def test_rt_size_0_after_rm_all_records(self):
+        rt = self.dm.create_route_table_w_hss_failover()
+         
+        rt.rm_by_id(1)
+        rt.rm_by_id(2)
+        
+        self.assertEqual(0, len(rt.records))
+        
+    def test_rt_size_0_after_rm_all_records_in_reverse_order(self):
+        rt = self.dm.create_route_table_w_hss_failover()
+         
+        rt.rm_by_id(2)
+        rt.rm_by_id(1)
+        
+        self.assertEqual(0, len(rt.records))
+        
     
-    def test_rt_rm_record_with_high_priority(self):
+    def test_rt_size_1_after_add_record(self):
+        imm = IMM()
+        rt = RouteTable(imm)
         
-        print "test_rt_rm_record_with_high_priority"
+        rt.add(['16777265',],  ([NULL_VALUE,], 'hss.com'), (['hss1'], 'hss.com'))
         
-        rt = self.dm.create_route_table_w_hss_failover()
+        self.assertEqual(1, len(rt.records))
         
-        rt.rm_by_route_items(['16777265',], ([NULL_VALUE,], 'hss.com'), (['hss1',], 'hss.com') )
-        print rt.to_string()
         
-        self.assertEqual(2, len(rt.imm.domains))
-        self.assertEqual(1, len(rt.imm.links))
-        self.assertEqual(1, len(rt.imm.selectors))
+    def test_rt_size_1_after_add_two_records(self):
+        imm = IMM()
+        rt = RouteTable(imm)
+        
+        rt.add(['16777265',],  ([NULL_VALUE,], 'hss.com'), (['hss1'], 'hss.com'))
+        rt.add(['16777265',],  ([NULL_VALUE,], 'hss.com'), (['hss2'], 'hss.com'))
+        
+        
+        self.assertEqual(1, len(rt.records))
+        self.assertEqual(1, len(rt.imm.selector_map))
+           
+            
 
-    
-    def test_rt_add_record_for_new_dest(self):
-        
-        print 'test_rt_add_record_for_new_dest'
-        
+    def test_rt_size_3_after_add_record(self):
+         
+        print 'test_rt_size_3_after_add_record'
+         
         rt = self.dm.create_route_table_w_hss_failover()
-        
+         
         rt.add(['16777265','16777250'], ([NULL_VALUE,], 'gw.com'), (['hss3','hss4'], 'hss.com') )
         print rt.to_string(f="TEXT")
         
-        self.assertEqual(5, len(rt.imm.domains))
-        self.assertEqual(3, len(rt.imm.links))
-        self.assertEqual(2, len(rt.imm.selectors))
         
-    def test_rt_add_hss(self):
+        self.assertEqual(3, len(rt.records))
          
-        print 'test_rt_add_record'
+        self.assertEqual(5, len(rt.imm.domain_map))
+        self.assertEqual(3, len(rt.imm.node_map))
+        self.assertEqual(2, len(rt.imm.selector_map))
          
-        rt = self.dm.create_route_table_w_hss_failover()
+#     def test_rt_size_1_after_add_hss_to_loadsharing_group(self):
+#           
+#         print 'test_rt_size_3_after_add_hss_to_loadsharing_group'
+#           
+#         rt = self.dm.create_route_table_w_hss_loadsharing()
+#           
+#         rt.add(['16777265',], ([NULL_VALUE,], 'hss.com'), (['hss3'], 'hss.com') )
+#         print rt.to_string(f="TEXT")
+#         
+#         self.assertEqual(1, len(rt.records))
+#           
+#         self.assertEqual(4, len(rt.imm.domain_map))
+#         self.assertEqual(3, len(rt.imm.node_map))
+#         self.assertEqual(1, len(rt.imm.selector_map))
          
-        rt.add(['16777265',], ([NULL_VALUE,], 'hss.com'), (['hss3'], 'hss.com') )
-        print rt.to_string(f="TEXT")
-         
-        self.assertEqual(4, len(rt.imm.domains))
-        self.assertEqual(3, len(rt.imm.links))
-        self.assertEqual(1, len(rt.imm.selectors))
-        
-        
-    def test_rt_rm_the_first_record(self):
-        print "test_rt_rm_the_first_record"
-        
-        rt = self.dm.create_route_table_w_hss_failover()
-        rt.rm_by_id(1)
-        print rt.to_string()
-        
-        self.assertEqual(2, len(rt.imm.domains))
-        self.assertEqual(1, len(rt.imm.links))
-        self.assertEqual(1, len(rt.imm.selectors))
-        
-        print rt.imm.selectors.values()[0].to_string()
-        
-        self.assertEqual(rt.imm.links.values()[0].next, NULL_VALUE)
-        self.assertEqual(rt.imm.links.values()[0].data, 'otpdiaDomain=hss2_hss.com')
-        self.assertEqual(rt.imm.selectors.values()[0].peer, 'otpdiaCons=hss2_hss.com')
-        
-    def test_rt_rm_the_last_record(self):
-        print "test_rt_rm_the_last_record"
-         
-        rt = self.dm.create_route_table_w_hss_failover()
-        rt.rm_by_id(2)
-        print rt.to_string()
-         
-        self.assertEqual(2, len(rt.imm.domains))
-        self.assertEqual(1, len(rt.imm.links))
-        self.assertEqual(1, len(rt.imm.selectors))
-         
-        print rt.imm.selectors.values()[0].to_string()
-        
-        self.assertEqual(rt.imm.links.values()[0].next, NULL_VALUE)
-        self.assertEqual(rt.imm.links.values()[0].data, 'otpdiaDomain=hss1_hss.com')
-        self.assertEqual(rt.imm.selectors.values()[0].link_head, 'otpdiaCons=hss1_hss.com')
-         
-    
 
 if __name__ == "__main__":
     unittest.main()
