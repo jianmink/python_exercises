@@ -227,10 +227,16 @@ class IMM(object):
         link node refer to new domain object
     '''
     
-    def __init__(self, selector_map={}, node_map={}, domain_map={}):
-        self.selector_map=selector_map
-        self.node_map=node_map
-        self.domain_map=domain_map
+    def __init__(self, s_map=None, n_map=None, d_map=None):
+        if s_map and n_map and d_map:
+            self.selector_map=s_map
+            self.node_map=n_map
+            self.domain_map=d_map
+        else:
+            self.selector_map = {}
+            self.node_map = {}
+            self.domain_map = {}
+        
         self.immcfg = IMMCFG()
     
         if self.selector_map:
