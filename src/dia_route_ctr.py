@@ -1,6 +1,8 @@
 import subprocess
 import time
 import argparse
+import copy
+import ast
 
 TO_APP_NAME = {
 '16777250':"STa",
@@ -44,6 +46,16 @@ LOWEST_PRI = 999
 
 ATTRIBUTE_HAS_MULTI_VALUE = ("host", "applicationId") #, "dest",  )
 
+g_imm_cmd_list = None # For debugging
+
+def get_cmd_list():
+    global g_imm_cmd_list
+    return g_imm_cmd_list
+
+def set_cmd_list(cmd_list):
+    global g_imm_cmd_list
+    g_imm_cmd_list = copy.deepcopy(cmd_list)
+    
 
 class OtpdiaObject(object):
     def __init__(self):
@@ -231,11 +243,15 @@ class IMMCFG():
         
         return dict_
     
-    
     def execute(self):
+        global g_imm_cmd_list
         for cmd in self.immcfg_cmd_list:
             print cmd
             self.run_command_impl(cmd)
+            
+        set_cmd_list(self.immcfg_cmd_list)  # save the cmd list for debugging only
+        self.immcfg_cmd_list = []
+        
             
     def run_command(self, cmd):
         self.immcfg_cmd_list.append(cmd)
@@ -306,7 +322,7 @@ class IMM(object):
             self.domain_map = {}
         
         self.immcfg = IMMCFG()
-    
+        
         if self.selector_map:
             # compute link size
             for k in self.selector_map.keys():
@@ -353,6 +369,15 @@ class IMM(object):
         self.immcfg.add_otpdiadomain(peer_obj)
         
         self.immcfg.add_otpdiacons(link_obj)
+        
+        node = self.node_map[selector.link_head_rdn]
+        pre_node = node
+        while node.next != NULL_VALUE:
+            pre_node = node
+            node = self.node_map[node.next]
+                
+        # todo previous node
+        self.immcfg.modify_imm_object(pre_node.rdn, 'tail', link_obj.rdn)
     
     def modify_domain(self, rdn, hosts, realm):
         
@@ -440,6 +465,17 @@ class IMM(object):
             result.append(s)
             
         return result  
+    
+    def get_selector_id(self):
+        result = []
+        for s in self.selector_map.values():
+            result.append(int(s.rdn[-1]))
+        
+        if not result:
+            return 1
+        else: 
+            return sorted(result)[-1] + 1
+            
                     
 def is_sub_list(listA, listB):
     for each in listA: 
@@ -607,28 +643,31 @@ class RouteTable(object):
             self.last_record_id +=1
             record_id = self.last_record_id
             
-            rdn = "otpdiaSelector=%d" %(record_id)
+            # todo: how to assign id/name for new linked list 
+            selector_id = record_id
+            
+            rdn = "otpdiaSelector=%d" %(selector_id)
             selector = OtpdiaSelector()
             selector.rdn = rdn
             selector.apps = apps
             selector.link_size = 0
             self.imm.selector_map[rdn] = selector
             
-            dest_rdn = "otpdiaDomain=dest_%d.%d" %(record_id, 1)
+            dest_rdn = "otpdiaDomain=dest_%d.%d" %(selector_id, 1)
             dest_obj = OtpdiaDomain()
             dest_obj.rdn = dest_rdn
             dest_obj.hosts = dest[0]
             dest_obj.realm = dest[1]
             self.imm.domain_map[dest_rdn] = dest_obj
             
-            peer_rdn = "otpdiaDomain=peer_%d.%d" %(record_id, selector.link_size+1)
+            peer_rdn = "otpdiaDomain=peer_%d.%d" %(selector_id, selector.link_size+1)
             peer_obj = OtpdiaDomain()
             peer_obj.rdn = peer_rdn
             peer_obj.hosts = peer[0]
             peer_obj.realm = peer[1] 
             self.imm.domain_map[peer_rdn] = peer_obj
              
-            link_rdn = "otpdiaCons=%d.%d" %(record_id, selector.link_size+1)
+            link_rdn = "otpdiaCons=%d.%d" %(selector_id, selector.link_size+1)
             link_obj = OtpdiaCons()
             link_obj.rdn = link_rdn
             link_obj.data = peer_rdn
@@ -655,15 +694,17 @@ class RouteTable(object):
             
             selector = result[0]
             
+            selector_id = int(selector.rdn[-1])
+            
             # by default: append the new node to the end of linked list
-            peer_rdn = "otpdiaDomain=peer_%d.%d" %(record_id, selector.link_size+1)
+            peer_rdn = "otpdiaDomain=peer_%d.%d" %(selector_id, selector.link_size+1)
             peer_obj = OtpdiaDomain()
             peer_obj.rdn = peer_rdn
             peer_obj.hosts = peer[0]
             peer_obj.realm = peer[1] 
             self.imm.domain_map[peer_rdn] = peer_obj
              
-            link_rdn = "otpdiaCons=%d.%d" %(record_id, selector.link_size+1)
+            link_rdn = "otpdiaCons=%d.%d" %(selector_id, selector.link_size+1)
             link_obj = OtpdiaCons()
             link_obj.rdn = link_rdn
             link_obj.data = peer_rdn
@@ -739,6 +780,14 @@ def list_route_table(output_format):
     route_table = RouteTable(imm)
     print route_table.to_string(output_format)    
 
+def parse_list_string(list_str):
+    s = list_str.strip()
+    s = s[1:-1] # remove outside bracket 
+    
+    list_ = s.split(',')
+    return [each.strip() for each in list_]
+    
+
 def add(args):
     
     # SWx 
@@ -756,38 +805,51 @@ def add(args):
     
     appid = [TO_APP_ID[app],]
     
-    host, realm = args.dest[1:-1].split(',')
+    dest = ast.literal_eval(args.peer)
+    peer = ast.literal_eval(args.peer)
     
-    if host == '*':
-        dest = ([''], realm)
-    else:
-        dest = ([host,], realm)
-
     
-    host, realm = args.peer[1:-1].split(',')
-    
-    peer = ([host,], realm)
+    if dest[0][0] == '*' or dest[0][0] == '':
+        dest[0][0] = NULL_VALUE
     
     print appid, dest, peer
     
     route_table.add(appid, dest, peer )
-                    
-def rm(args):
+
+def modify(args):
+    if not args.record:
+        print "please provide the id of route record to be modified"
+        print "use list cmd to print the route table"
+        return 
+
     imm = IMM()
     imm.load_imm_object()
     route_table = RouteTable(imm)
     
+    peer = ast.literal_eval(args.peer)
+    print peer
+    
+    if args.peer:
+        route_table.modify(int(args.record), 'peer', peer)
+    
+                    
+def rm(args):
     if not args.record:
         print "please provide the id of route record to be removed"
         print "use list cmd to print the route table"
         return 
+
+    imm = IMM()
+    imm.load_imm_object()
+    route_table = RouteTable(imm)
+    
     
     route_table.rm(int(args.record))
 
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cmd",  choices=('list', 'add', 'rm'))
+    parser.add_argument("--cmd",  choices=('list', 'add', 'rm', 'modify'))
     
     # for add cmd
     parser.add_argument("--apps")
@@ -808,6 +870,8 @@ if __name__ == "__main__":
         add(args)
     elif args.cmd == "rm":
         rm(args)
+    elif args.cmd == 'modify':
+        modify(args)
     else:
         parser.print_help()
     
