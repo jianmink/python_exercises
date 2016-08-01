@@ -780,19 +780,7 @@ def list_route_table(output_format):
     route_table = RouteTable(imm)
     print route_table.to_string(output_format)    
 
-def parse_list_string(list_str):
-    s = list_str.strip()
-    s = s[1:-1] # remove outside bracket 
-    
-    list_ = s.split(',')
-    return [each.strip() for each in list_]
-    
-
 def add(args):
-    
-    # SWx 
-    # (*, hss.com)  
-    # ('hss1', 'hss.com')
     
     imm = IMM()
     imm.load_imm_object()
@@ -805,7 +793,7 @@ def add(args):
     
     appid = [TO_APP_ID[app],]
     
-    dest = ast.literal_eval(args.peer)
+    dest = ast.literal_eval(args.dest)
     peer = ast.literal_eval(args.peer)
     
     
@@ -847,14 +835,22 @@ def rm(args):
     route_table.rm(int(args.record))
 
 if __name__ == "__main__":
+        
+    '''
+    Example:
+        python ./dia_route_ctr.py --cmd list
+        python ./dia_route_ctr.py --cmd add --apps 'SWx'  --dest "[['*'],'hss.com']" --peer "[['hss1'],'hss.com']"        
+        python ./dia_route_ctr.py --cmd modify --record 1 --peer "[['hss1','hss2'],'hss.com']"
+        python ./dia_route_ctr.py --cmd rm --record 1
+    '''
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--cmd",  choices=('list', 'add', 'rm', 'modify'))
     
     # for add cmd
     parser.add_argument("--apps")
-    parser.add_argument("--dest")
-    parser.add_argument("--peer")
+    parser.add_argument("--dest", type=str)
+    parser.add_argument("--peer", type=str)
     
     # for rm cmd
     parser.add_argument("--record")
