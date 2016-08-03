@@ -32,15 +32,14 @@ LOWEST_PRI = 999
 # 2. list route record in text mode
 # 3. rm route record by record id
 # 4. add new route record
-# 
+# 5. modify peer info
 
 
 # todo list
 # validate
 # support multiple value of otpdiaSelector.dest 
-# support transaction for immcfg cmd
-# support shell mode
-# support change priority of failover group 
+# support transaction for immcfg cmd, use "immcfg -f ./tmp/dia_route.xml" 
+# support shell mode 
 # 
 
 
@@ -59,6 +58,7 @@ def set_cmd_list(cmd_list):
 
 class OtpdiaObject(object):
     def __init__(self):
+        self.key_value_pairs={}
         pass
     
     def parse(self, text):
@@ -73,94 +73,12 @@ class OtpdiaObject(object):
             else:
                 v = t[2].rstrip()    
                 self.key_value_pairs[k] = v
+                
+    def get(self, k):
+        return self.key_value_pairs[k]
     
-class OtpdiaSelector(OtpdiaObject):   
-    '''
-         name in IMM class     |  name in python OtpdiaCons class 
-             peer              |     link_head_rdn
-             destination       |     dest_rdn
-             applicationId     |     apps
-    '''
-    def parse(self, text):
-        self.key_value_pairs={}
-        super(OtpdiaSelector,self).parse(text)
-            
-        self.apps           = self.key_value_pairs['applicationId']
-        self.service        = self.key_value_pairs['service']
-        self.dest_rdn       = self.key_value_pairs['destination']
-        self.link_head_rdn  = self.key_value_pairs['peer']
-        self.rdn            = self.key_value_pairs['otpdiaSelector']
-        
-        return self
-
-    def to_string(self):
-        return ("service='%s'\n"
-        "applicationId='%s'\n"
-        "destination='%s'\n"
-        "peer='%s'\n" %(self.service, self.apps, self.dest_rdn, self.link_head_rdn))
-        
-    
-class OtpdiaCons(OtpdiaObject): 
-    '''
-         name in IMM class |  name in python OtpdiaCons class 
-             head          |     data
-             tail          |     next
-    '''
-    def parse(self, text):
-        self.key_value_pairs={} 
-        super(OtpdiaCons,self).parse(text)
-                    
-        self.data    = self.key_value_pairs['head']
-        self.next    = self.key_value_pairs['tail']
-        self.rdn     = self.key_value_pairs['otpdiaCons']
-
-        return self
-    
-    def to_string(self):
-        return ("data='%s'\n"
-        "next='%s'\n" %(self.data, self.next))
-        
-
-class OtpdiaDomain(OtpdiaObject):    
-    def parse(self, text):
-        self.key_value_pairs={}
-        super(OtpdiaDomain,self).parse(text)
-            
-        self.realm  = self.key_value_pairs['realm']
-        self.hosts   = self.key_value_pairs['host']
-        self.rdn    = self.key_value_pairs['otpdiaDomain']
-
-        return self
-        
-    def to_string(self):        
-        hosts, realm = self.hosts, self.realm
-        if NULL_VALUE in hosts:   hosts = WILDCARD_SYMBOL
-        if realm == NULL_VALUE:   realm = WILDCARD_SYMBOL
-
-        return ("host = %s,  realm = %s" %(hosts, realm))
-
-class OtpdiaObjectFactory(object):
-    @staticmethod
-    def create(class_name):
-        if class_name == "OtpdiaSelector":
-            return OtpdiaSelector()
-        elif class_name == "OtpdiaCons":
-            return OtpdiaCons()
-        elif class_name == "OtpdiaDomain":
-            return OtpdiaDomain()
-        else:
-            print "ERROR: unknown IMM class name: %s" %(class_name)
-            return None
-
 
 class IMMCFG():
-    ''' immcfg tool 
-        the core is the link operation:
-            add link node
-            rm  link node
-            modify link node
-    '''
-    
     def __init__(self):
         self.SERVICE_DN="otpdiaService=epc_aaa,otpdiaProduct=AAAServer"
         
@@ -173,7 +91,7 @@ class IMMCFG():
     def modify_imm_object(self,rdn,key, value):
         
         if key not in ATTRIBUTE_HAS_MULTI_VALUE:
-            if value == NULL_VALUE: value = ''
+            if not value or value == NULL_VALUE: value = ''
             self.run_command("immcfg -a %s=%s %s" %(key, value, rdn))
             
         else:
@@ -194,33 +112,33 @@ class IMMCFG():
     
     def add_otpdiaselector(self, selector):
         rdn = selector.rdn
-        cmd = 'immcfg -c OtpdiaSelector %s -a peer=%s -a  service="%s"' %(rdn, selector.link_head_rdn, self.SERVICE_DN )
+        cmd = 'immcfg -c OtpdiaSelector %s -a peer=%s -a  service="%s"' %(rdn, selector.link_head.rdn, self.SERVICE_DN )
         self.run_command(cmd)
         
-        for each in selector.apps:
+        for each in selector.matcher.app_list:
             cmd = "immcfg -a applicationId+=%s %s" %(each,rdn)
             self.run_command(cmd)
             
-        cmd = "immcfg -a destination+=%s %s" %(selector.dest_rdn,rdn)
+        cmd = "immcfg -a destination+=%s %s" %(selector.matcher.dest.rdn,rdn)
         self.run_command(cmd)
         
         
-    def add_otpdiacons(self, link_obj, pre_link_obj=None, next_link_obj=None):
+    def add_otpdiacons(self, link_node, pre_link_obj=None, next_link_obj=None):
         
         if not next_link_obj: 
-            cmd = "immcfg -c OtpdiaCons %s -a head=%s" %(link_obj.rdn, link_obj.data)
+            cmd = "immcfg -c OtpdiaCons %s -a head=%s" %(link_node.rdn, link_node.data.rdn)
         else:
-            cmd = "immcfg -c OtpdiaCons %s -a head=%s -a tail=%s" %(link_obj.rdn, link_obj.data, next_link_obj.rdn)
+            cmd = "immcfg -c OtpdiaCons %s -a head=%s -a tail=%s" %(link_node.rdn, link_node.data, next_link_obj.rdn)
         
         self.run_command(cmd)
         
         if pre_link_obj: 
-            cmd = "immcfg -a tail=%s %s" %(link_obj.rdn,pre_link_obj.rdn)
+            cmd = "immcfg -a tail=%s %s" %(link_node.rdn,pre_link_obj.rdn)
             self.run_command(cmd)
             
     
     def add_otpdiadomain(self, domain):
-        rdn, hosts, realm = domain.rdn, domain.hosts, domain.realm
+        rdn, hosts, realm = domain.rdn, domain.host_list, domain.realm
         cmd = "immcfg -c OtpdiaDomain %s -a realm=%s" %(rdn, realm)
         self.run_command(cmd)
         
@@ -238,7 +156,8 @@ class IMMCFG():
         for line in self.run_command_impl(cmd):
             cmd = "immlist "+line
             text = self.run_command_impl(cmd)
-            s = OtpdiaObjectFactory.create(class_name).parse(text)
+            s = OtpdiaObject()
+            s.parse(text)
             dict_[line.rstrip()]=s
         
         return dict_
@@ -273,7 +192,6 @@ class IMMCFG():
         return output
                       
     def run_command_(self, command):
-#         print command
         p = subprocess.Popen(command,
                              shell=True,
                              stdout=subprocess.PIPE,
@@ -292,25 +210,53 @@ class IMMCFG():
         
         return p.returncode, rtn.split('\n')[:-1]
 
+
+
+class Selector(object):
+    def __init__(self):
+        self.rdn = ""
+        self.matcher = None
+        self.link_head = None
+
+class Matcher(object):
+    def __init__(self, app_list, dest):
+        self.app_list = app_list
+        self.dest = dest
+                
+class LinkNode(object):
+    def __init__(self, rdn, data, next_, selector):
+        self.rdn = rdn
+        self.data = data
+        self.next = next_
+        self.selector = selector
+        
+    def get_priority(self):
+        node = self.selector.link_head
+        
+        p = 1
+        while node:
+            if node.rdn == self.rdn:
+                return p
+            else:
+                node = node.next
+                p += 1   
+        
+        return 0
     
+class Domain(object):
+    def __init__(self, rdn, host_list, realm):
+        self.rdn = rdn
+        self.host_list = host_list
+        self.realm = realm
+
+    def to_string(self):        
+        hosts, realm = self.host_list, self.realm
+        if NULL_VALUE in hosts:   hosts = WILDCARD_SYMBOL
+        if realm == NULL_VALUE:   realm = WILDCARD_SYMBOL
+
+        return ("host = %s,  realm = %s" %(hosts, realm))
 
 class IMM(object):
-    '''
-    add/remove link node from linked list
-        1) update linked list in memory
-        2) update immdb
-        
-    link head:  selector.link_head_rdn
-    
-    link node:  
-            next: rdn of next link node
-            data: rdn of domain object
-    
-    modify data refered by link node:
-        chage domain object
-        link node refer to new domain object
-    '''
-    
     def __init__(self, s_map=None, n_map=None, d_map=None):
         if s_map and n_map and d_map:
             self.selector_map=s_map
@@ -323,144 +269,205 @@ class IMM(object):
         
         self.immcfg = IMMCFG()
         
-        if self.selector_map:
-            # compute link size
-            for k in self.selector_map.keys():
-                s = self.selector_map[k]
-                s.link_size = self.sizeof_link(s.link_head_rdn)
+        self.linked_lists = {}
         
-    
+        self.build_linked_list()
+        
+         
+    def build_linked_list(self):
+        for k in self.selector_map.keys():
+            otp_s = self.selector_map[k]
+            
+            s = Selector()
+            self.linked_lists[otp_s.get("otpdiaSelector")] = s
+            s.rdn = otp_s.get("otpdiaSelector")
+            
+            otp_domain = self.domain_map[otp_s.get("destination")]
+            d = Domain(otp_domain.get("otpdiaDomain"), otp_domain.get("host"), otp_domain.get("realm"))
+
+            s.matcher = Matcher(otp_s.get("applicationId"), d)
+            
+            s.link_head=None
+            
+            node_rdn = otp_s.get("peer")
+            is_head = True
+            pre_node = None
+            
+            while self.node_map.has_key(node_rdn):
+                otp_link = self.node_map[node_rdn]
+                
+                otp_domain = self.domain_map[otp_link.get("head")]
+                d = Domain(otp_domain.get("otpdiaDomain"), otp_domain.get("host"), otp_domain.get("realm"))
+                
+                node = LinkNode(otp_link.get("otpdiaCons"), d, None, s)
+                
+                if is_head:
+                    is_head = False
+                    s.link_head = node
+                else:
+                    pre_node.next = node    
+                    
+                if otp_link.get("tail") == NULL_VALUE:
+                    node.next = None
+                else:
+                    pre_node = node
+                
+                node_rdn = otp_link.get("tail")
+                
     def load_imm_object(self):
         self.selector_map=self.immcfg.load_imm_object("OtpdiaSelector")
         self.node_map = self.immcfg.load_imm_object("OtpdiaCons")
         self.domain_map = self.immcfg.load_imm_object("OtpdiaDomain")
             
-        # compute link size
-        for k in self.selector_map.keys():
-            s = self.selector_map[k]
-            s.link_size = self.sizeof_link(s.link_head_rdn)
+        self.build_linked_list()
     
      
-    def sizeof_link(self, link_head_rdn):
-        node = self.node_map[link_head_rdn]
-        count = 1
-        while node.next != NULL_VALUE:
+    def sizeof_link(self, selector):
+        count = 0
+        node = selector.link_head
+        while node:
             count += 1
-            node = self.node_map[node.next]
+            node = node.next
             
         return count
             
     
-    def add_linked_list (self, selector, link_obj ):
+    def add_linked_list (self, app_list, dest, peer ):
+        # assign id/name for new linked list 
+        selector_id = 1
+        rdn = "otpdiaSelector=%d" %(selector_id)
+        while self.linked_lists.has_key(rdn):
+            selector_id += 1
+            rdn = "otpdiaSelector=%d" %(selector_id)
         
-        peer_obj = self.domain_map[link_obj.data]
-        dest_obj = self.domain_map[selector.dest_rdn]
+        s = Selector()
+        s.rdn = rdn
         
-        self.immcfg.add_otpdiadomain(peer_obj)
-        self.immcfg.add_otpdiadomain(dest_obj)
+        dest_rdn = "otpdiaDomain=dest_%d.%d" %(selector_id, 1)
+        dest_domain = Domain(dest_rdn, dest[0], dest[1])
         
-        self.immcfg.add_otpdiacons(link_obj)
-        self.immcfg.add_otpdiaselector(selector)
+        peer_rdn = "otpdiaDomain=peer_%d.%d" %(selector_id, 1)
+        peer_domain = Domain(peer_rdn, peer[0], peer[1])
+        
+         
+        link_rdn = "otpdiaCons=%d.%d" %(selector_id, 1)
+        link_node = LinkNode(link_rdn, peer_domain, None, s)
+
+        s.link_head = link_node
+        s.matcher = Matcher(app_list, dest_domain )
+        
+        self.immcfg.add_otpdiadomain(link_node.data)
+        self.immcfg.add_otpdiadomain(s.matcher.dest)
+        self.immcfg.add_otpdiacons(link_node)
+        self.immcfg.add_otpdiaselector(s)
+        
+        self.linked_lists[s.rdn] = s
+        
+        return link_node
         
     
-    def append_link_node(self, selector, link_obj):
+    def append_link_node(self,selector, peer):
         
-        peer_obj = self.domain_map[link_obj.data]
-        self.immcfg.add_otpdiadomain(peer_obj)
+        selector_id = selector.rdn.split('otpdiaSelector=')[1]
         
-        self.immcfg.add_otpdiacons(link_obj)
+        # by default: append the new node to the end of linked list
         
-        node = self.node_map[selector.link_head_rdn]
+        node_id = 0
+        while True:
+            peer_rdn = "otpdiaDomain=peer_%s.%d" %(selector_id, node_id+1)
+            if not self.domain_map.has_key(peer_rdn):
+                break;
+            node_id += 1
+            
+        peer_obj = Domain(peer_rdn, peer[0], peer[1])
+         
+        link_rdn = "otpdiaCons=%s.%d" %(selector_id, node_id + 1)
+        link_node = LinkNode(link_rdn, peer_obj, None, selector)
+        
+        node = selector.link_head
+        while node:
+            if not node.next:
+                node.next = link_node
+                break
+            else:
+                node = node.next
+        
+        
+        self.immcfg.add_otpdiadomain(link_node.data)
+        self.immcfg.add_otpdiacons(link_node)
+        
+        node = link_node.selector.link_head
         pre_node = node
-        while node.next != NULL_VALUE:
+        while node.next:
             pre_node = node
-            node = self.node_map[node.next]
+            node = node.next
                 
-        # todo previous node
-        self.immcfg.modify_imm_object(pre_node.rdn, 'tail', link_obj.rdn)
+        self.immcfg.modify_imm_object(pre_node.rdn, 'tail', link_node.rdn)
+        
+        return link_node
     
     def modify_domain(self, rdn, hosts, realm):
         
         self.immcfg.modify_imm_object(rdn, 'host', hosts)
         self.immcfg.modify_imm_object(rdn, 'realm', realm)
         
-        self.domain_map[rdn].hosts = hosts
-        self.domain_map[rdn].realm = realm
+        
+    def update_link_head(self, selector, link_node):
+        selector.link_head = link_node
+        self.immcfg.modify_imm_object(selector.rdn, "peer", link_node.rdn )
         
         
-    def update_link_head(self, selector, link_node_rdn):
-        selector.link_head_rdn = link_node_rdn
-        self.immcfg.modify_imm_object(selector.rdn, "peer", link_node_rdn )
-        
-        
-    def get_pre_link_node(self, node_rdn):
+    def get_pre_link_node(self, link_node):
         prev_node = None
-        for n in self.node_map.values():
-            if n.next == node_rdn:
-                prev_node = n 
+        
+        node = link_node.selector.link_head
+        while node:
+            if node.next == link_node:
+                prev_node = node 
                 break
         
         return prev_node
         
-    def rm_domain(self, rdn):
-        if rdn in self.domain_map.keys(): self.domain_map.pop(rdn)
+
+    def rm_link_node(self, link_node):
+        s = link_node.selector
+        link_size = self.sizeof_link(s)
         
-        self.immcfg.rm_imm_object(rdn)
-        
-    def rm_link_node(self, selector, node_rdn):
-        
-        '''
-        remove link node and referred domain node.
-        
-        remove selector node if link becomes empty
-        '''
-        
-        h_rdn = selector.link_head_rdn
-        
-        if selector.link_size == 1:
+        if  link_size == 1:
             
             print "INFO: link size is one, so remove the selector"
-            self.selector_map.pop(selector.rdn)
-            self.immcfg.rm_imm_object(selector.rdn)
-            self.rm_domain(selector.dest_rdn)
-
-                        
-            node = self.node_map.pop(node_rdn)
-            self.immcfg.rm_imm_object(node_rdn)
             
-            self.rm_domain(node.data)
+            self.immcfg.rm_imm_object(s.rdn)
+            self.immcfg.rm_imm_object(s.matcher.dest.rdn)
+            self.immcfg.rm_imm_object(link_node.rdn)
+            self.immcfg.rm_imm_object(link_node.data.rdn)
             
-        elif h_rdn == node_rdn: # link head
-            node = self.node_map.pop(node_rdn)
-            self.update_link_head(selector, node.next)
             
-            self.immcfg.rm_imm_object(node_rdn)               
-            self.rm_domain(node.data)
+        elif s.link_head == link_node: # link head
+            self.update_link_head(s, link_node.next)
+            self.immcfg.rm_imm_object(link_node.rdn)               
+            self.immcfg.rm_imm_object(link_node.data.rdn)
             
         else:
-            pre_node = self.get_pre_link_node(node_rdn)
-            node = self.node_map.pop(node_rdn)
-            pre_node.next = node.next 
+            pre_node = self.get_pre_link_node(link_node)
+            pre_node.next = link_node.next 
         
-            self.immcfg.modify_imm_object(pre_node.rdn, "tail", node.next)            
-            self.immcfg.rm_imm_object(node_rdn)
-            self.rm_domain(node.data)
+            self.immcfg.modify_imm_object(pre_node.rdn, "tail", link_node.next)            
+            self.immcfg.rm_imm_object(link_node.rdn)
+            self.immcfg.rm_imm_object(link_node.data.rdn)
             
             
             
-    def find_selector(self, apps, dest):
-        # return all the selectors match the input conditions
+    def find_selector(self, apps, host_list, realm):
         result=[]
-        for s in self.selector_map.values():
+        for s in self.linked_lists.values():
             
-            if not is_sub_list(apps, s.apps):
+            if not is_sub_list(apps, s.matcher.app_list):
                 continue
 
-            hosts = self.domain_map[s.dest_rdn].hosts
-            realm = self.domain_map[s.dest_rdn].realm
-            if dest[1] != realm: continue
+            if realm != s.matcher.dest.realm: continue
             
-            if not is_sub_list(dest[0], hosts): continue
+            if not is_sub_list(host_list, s.matcher.dest.host_list): continue
             
             result.append(s)
             
@@ -494,28 +501,19 @@ class RouteRecord(object):
             It refers to the position in the linked list
     
     '''
-    def __init__(self, record_id, selector, dest_obj, link_obj, peer_obj, priority):
-        
-        self.selector = selector
-        self.link_obj = link_obj 
-        self.link_rdn = link_obj.rdn
-  
+    def __init__(self, record_id, link_node):
+        self.link_node = link_node
         self.record_id = record_id
-        self.apps = selector.apps
-        self.dest_obj = dest_obj
-        self.peer_obj = peer_obj
- 
-        
-        self.priority = priority
-        
-                
+                        
     def to_string(self):
+        m  = self.link_node.selector.matcher
+        
         str_= ""
         str_ += "id:       " + str(self.record_id) + '\n'
-        str_ += "app:      " + (' '.join([TO_APP_NAME[each] for each in self.apps])) + "\n"
-        str_ += "dest:     " + self.dest_obj.to_string() + '\n'
-        str_ += "peer:     " + self.peer_obj.to_string() + '\n'
-        str_ += "priority: " + str(self.priority) +'\n'
+        str_ += "app:      " + (' '.join([TO_APP_NAME[each] for each in m.app_list])) + "\n"
+        str_ += "dest:     " + m.dest.to_string() + '\n'
+        str_ += "peer:     " + self.link_node.data.to_string() + '\n'
+        str_ += "priority: " + str(self.link_node.get_priority()) +'\n'
         str_ += "\n"
         return str_
              
@@ -526,38 +524,30 @@ class RouteTable(object):
         self.imm = imm
         
         self.records={}
-        record_id = 1
-        for selector in self.imm.selector_map.values():
+        record_id = 0
+        
+        for rdn in self.imm.linked_lists.keys():
             
-            link = self.imm.node_map[selector.link_head_rdn]
-            priority=1
+            linked_list = self.imm.linked_lists[rdn]
             
-            while True:
-                dest_obj = self.imm.domain_map[selector.dest_rdn]
-                peer_obj = self.imm.domain_map[link.data]
-                
-                record = RouteRecord(record_id,
-                                     selector, 
-                                     dest_obj, 
-                                     link,
-                                     peer_obj,
-                                     priority)
+            link_node = linked_list.link_head 
+            
+            while link_node:
                 
                 record_id += 1
+                record = RouteRecord(record_id,
+                                     link_node)
+                
                  
-                k = self.hash(selector.apps, 
-                              dest_obj.hosts, dest_obj.realm,
-                              peer_obj.hosts, peer_obj.realm)
+                k = self.hash(linked_list.matcher.app_list, 
+                              linked_list.matcher.dest.host_list, linked_list.matcher.dest.realm,
+                              link_node.data.host_list, link_node.data.realm)
                 
                 self.records[k] = record
                 
-                if link.next == NULL_VALUE: 
-                    break 
-                else:
-                    link = self.imm.node_map[link.next]
-                    priority +=1
+                link_node = link_node.next 
                     
-        self.last_record_id = record_id - 1
+        self.last_record_id = record_id
     
     def hash(self, apps, dest_hosts, dest_realm, peer_host, peer_realm):
         k =  ''.join(apps)
@@ -602,11 +592,14 @@ class RouteTable(object):
             
         for k in sorted(tmp.keys()):
             record = tmp[k]
+            
+            m = record.link_node.selector.matcher
+            
             str_ += ("|%4d|%8s|%-44s|%-44s|%10d\n"
-                        %(record.record_id, ' '.join([TO_APP_NAME[each] for each in record.apps]),
-                        record.dest_obj.to_string(),
-                        record.peer_obj.to_string(),
-                        record.priority)
+                        %(record.record_id, ' '.join([TO_APP_NAME[each] for each in m.app_list]),
+                        m.dest.to_string(),
+                        record.link_node.data.to_string(),
+                        record.link_node.get_priority())
                     )
             
             str_ += line_separator
@@ -635,7 +628,7 @@ class RouteTable(object):
             print "ERROR: record already exist"
             return
         
-        result = self.imm.find_selector(apps, dest)
+        result = self.imm.find_selector(apps, dest[0], dest[1])
         
         if len(result) == 0:
             print "case 1: add new linked list"
@@ -643,45 +636,9 @@ class RouteTable(object):
             self.last_record_id +=1
             record_id = self.last_record_id
             
-            # todo: how to assign id/name for new linked list 
-            selector_id = record_id
-            
-            rdn = "otpdiaSelector=%d" %(selector_id)
-            selector = OtpdiaSelector()
-            selector.rdn = rdn
-            selector.apps = apps
-            selector.link_size = 0
-            self.imm.selector_map[rdn] = selector
-            
-            dest_rdn = "otpdiaDomain=dest_%d.%d" %(selector_id, 1)
-            dest_obj = OtpdiaDomain()
-            dest_obj.rdn = dest_rdn
-            dest_obj.hosts = dest[0]
-            dest_obj.realm = dest[1]
-            self.imm.domain_map[dest_rdn] = dest_obj
-            
-            peer_rdn = "otpdiaDomain=peer_%d.%d" %(selector_id, selector.link_size+1)
-            peer_obj = OtpdiaDomain()
-            peer_obj.rdn = peer_rdn
-            peer_obj.hosts = peer[0]
-            peer_obj.realm = peer[1] 
-            self.imm.domain_map[peer_rdn] = peer_obj
-             
-            link_rdn = "otpdiaCons=%d.%d" %(selector_id, selector.link_size+1)
-            link_obj = OtpdiaCons()
-            link_obj.rdn = link_rdn
-            link_obj.data = peer_rdn
-            link_obj.next = NULL_VALUE
-            self.imm.node_map[link_rdn] = link_obj
-                
-            
-            selector.link_head_rdn = link_rdn
-            selector.dest_rdn = dest_rdn
-            selector.link_size = 1
-            
-            self.imm.add_linked_list(selector, link_obj)
+            node = self.imm.add_linked_list(apps, dest, peer)
 
-            record = RouteRecord(record_id, selector, dest_obj, link_obj, peer_obj, selector.link_size)
+            record = RouteRecord(record_id, node)
             self.records[k] = record
             
             
@@ -691,46 +648,17 @@ class RouteTable(object):
             self.last_record_id +=1
             record_id = self.last_record_id
             
-            
             selector = result[0]
+            link_node = self.imm.append_link_node(selector, peer)
             
-            selector_id = int(selector.rdn[-1])
-            
-            # by default: append the new node to the end of linked list
-            peer_rdn = "otpdiaDomain=peer_%d.%d" %(selector_id, selector.link_size+1)
-            peer_obj = OtpdiaDomain()
-            peer_obj.rdn = peer_rdn
-            peer_obj.hosts = peer[0]
-            peer_obj.realm = peer[1] 
-            self.imm.domain_map[peer_rdn] = peer_obj
-             
-            link_rdn = "otpdiaCons=%d.%d" %(selector_id, selector.link_size+1)
-            link_obj = OtpdiaCons()
-            link_obj.rdn = link_rdn
-            link_obj.data = peer_rdn
-            link_obj.next = NULL_VALUE
-            self.imm.node_map[link_rdn] = link_obj
-            
-            node_rdn = selector.link_head_rdn
-            while True:
-                next_rdn = self.imm.node_map[node_rdn].next
-                if next_rdn == NULL_VALUE:
-                    self.imm.node_map[node_rdn].next = link_rdn
-                    break
-                else:
-                    node_rdn = next_rdn
-            
-            selector.link_size += 1
-            
-            dest_obj = self.imm.domain_map[selector.dest_rdn]
-            record = RouteRecord(record_id, selector, dest_obj, link_obj, peer_obj, selector.link_size)
+            record = RouteRecord(record_id, link_node)
             self.records[k] = record
             
-            self.imm.append_link_node(selector, link_obj)
             
         else:
             # case 3: to do 
-            print "Error: more than one candidate linked list!!!"
+            print "ERROR: more than one candidate linked list!!!"
+            return 
             
             
         self.imm.immcfg.execute()
@@ -741,7 +669,7 @@ class RouteTable(object):
         record = self.find_record(record_id)
         
         if record:
-            self.imm.rm_link_node(record.selector, record.link_rdn)
+            self.imm.rm_link_node(record.link_node)
             
             for each in self.records.keys():
                 if self.records[each] ==  record:
@@ -749,6 +677,7 @@ class RouteTable(object):
                     break
         else:
             print "ERROR: no record found with id " + str(record_id)
+            return
             
         
         self.imm.immcfg.execute()
@@ -764,10 +693,11 @@ class RouteTable(object):
         
         
         if field == 'peer':
-            self.imm.modify_domain(record.peer_obj.rdn, value[0], value[1])
+            self.imm.modify_domain(record.link_node.rdn, value[0], value[1])
         
         else:
-            print "WARNING, todo modify %s" %(field)       
+            print "WARNING, todo modify %s" %(field) 
+            return      
 
 
         self.imm.immcfg.execute()
