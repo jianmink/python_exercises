@@ -693,7 +693,7 @@ class RouteTable(object):
         
         
         if field == 'peer':
-            self.imm.modify_domain(record.link_node.rdn, value[0], value[1])
+            self.imm.modify_domain(record.link_node.data.rdn, value[0], value[1])
         
         else:
             print "WARNING, todo modify %s" %(field) 

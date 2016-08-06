@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import unittest
-from route_adm import *
+from dia_route_ctr import *
 
 
 
@@ -57,7 +57,7 @@ class DataMama(object):
     def create_domain_object(self, hosts, realm):
         
         if len(hosts) > 0:
-            rdn = "otpdiaDomain=%s_%s" %(",".join(hosts), realm)
+            rdn = "otpdiaDomain=%s_%s" %("".join(hosts), realm)
             host = " ".join(hosts)
         else:
             rdn = "otpdiaDomain=_%s" %(realm)
@@ -230,10 +230,10 @@ class TestRouteTable(unittest.TestCase):
         rt.add(['16777265',],  ([NULL_VALUE,], 'hss.com'), (['hss2'], 'hss.com'))
          
         cmd_list = [
-        "immcfg -c OtpdiaDomain otpdiaDomain=peer_1.2 -a realm=hss.com",
-        "immcfg -a host+=hss1 otpdiaDomain=peer_1.2",
-        "immcfg -c OtpdiaCons otpdiaCons=1.2 -a head=otpdiaDomain=peer_1.2",
-        "immcfg -a tail=otpdiaCons=1.2 otpdiaCons=1.1"
+        "immcfg -c OtpdiaDomain otpdiaDomain=peer_1.1 -a realm=hss.com",
+        "immcfg -a host+=hss1 otpdiaDomain=peer_1.1",
+        "immcfg -c OtpdiaCons otpdiaCons=1.1 -a head=otpdiaDomain=peer_1.1",
+        "immcfg -a tail=otpdiaCons=1.1 otpdiaCons=1.1"
         ]
  
          
@@ -275,8 +275,8 @@ class TestRouteTable(unittest.TestCase):
         print "\n test_remove_host_of_peer"
         
         cmd_list = [
-        "immcfg -a host=hss1 otpdiaCons=hss1hss2_hss.com",
-        "immcfg -a realm=hss.com otpdiaCons=hss1hss2_hss.com"
+        "immcfg -a host=hss1 otpdiaDomain=hss1hss2_hss.com",
+        "immcfg -a realm=hss.com otpdiaDomain=hss1hss2_hss.com"
         ]
          
         rt = self.dm.create_route_table_w_hss_loadsharing()
@@ -299,10 +299,10 @@ class TestRouteTable(unittest.TestCase):
          
         print rt.to_string()
          
-        cmd_list = ["immcfg -a host=hss1 otpdiaCons=hss1hss2_hss.com",
-                    "immcfg -a host+=hss2 otpdiaCons=hss1hss2_hss.com",
-                    "immcfg -a host+=hss3 otpdiaCons=hss1hss2_hss.com",
-                    "immcfg -a realm=hss.com otpdiaCons=hss1hss2_hss.com"]
+        cmd_list = ["immcfg -a host=hss1 otpdiaDomain=hss1hss2_hss.com",
+                    "immcfg -a host+=hss2 otpdiaDomain=hss1hss2_hss.com",
+                    "immcfg -a host+=hss3 otpdiaDomain=hss1hss2_hss.com",
+                    "immcfg -a realm=hss.com otpdiaDomain=hss1hss2_hss.com"]
 
         self.assertEqual(cmd_list, get_cmd_list())
 
