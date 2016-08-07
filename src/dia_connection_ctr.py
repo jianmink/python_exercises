@@ -4,39 +4,17 @@ import argparse
 import copy
 import ast
 
-TO_APP_NAME = {
-'16777250':"STa",
-'16777265':"SWx",
-'16777272':"S6b",
-'16777264':"SWm",
-'16777217':"Sh",
-'99887766':"SWm+"
-               }
-
-TO_APP_ID = {
-"STa":'16777250',
-"SWx":'16777265',
-"S6b": '16777272',
-"SWm": '16777264',
-"Sh":  '16777217',
-"SWm+": '99887766'
-               }
 
 NULL_VALUE = "<Empty>"
 WILDCARD_SYMBOL = "*"
 IMMCFG_SLEEP_TIME = 0
 LOWEST_PRI = 999
 
-# function list:
-# 1. 
+SERVICE_DN="otpdiaService=epc_aaa,otpdiaProduct=IPWorksAAA"
 
 
 # todo list
-# list
-# rm
-# add
-# modify
-
+# support multi-homing
 
 ATTRIBUTE_HAS_MULTI_VALUE = ("host", "applicationId") #, "dest",  )
 
@@ -103,23 +81,38 @@ class IMMCFG():
                     is_first_element = False
                 else:
                     self.run_command("immcfg -a %s+=%s %s" %(key, v, rdn))
-                    
     
-    def add_otpdiatransport(self, transport):
-        rdn = transport.rdn
+    def add_otpdia_host(self, remote):
+        cmd = ('immcfg -c OtpdiaHost %s -a address=%s -a port=%s' 
+               %(remote.rdn, remote.ip, remote.port))
         
-        if transport.port == '0':
-            cmd = 'immcfg -c OtpdiaTransportTcp %s -a address=%s -a port=%s -a host=%s' %(rdn, transport.ip, transport.port, transport.host)
+        self.run_command(cmd)              
+    
+    def add_otpdia_transport_tcp(self, transport):
+        rdn = transport.rdn
+         
+        if not transport.remote:
+            cmd = ('immcfg -c OtpdiaTransportTcp %s -a address=%s -a port=%s -a host=%s -a service=%s' 
+                  %(rdn, transport.local_ip, transport.local_port, transport.host, SERVICE_DN))
+            
             self.run_command(cmd)
         else:
-            cmd =('immcfg -c OtpdiaTransportTcp %s -a address=%s -a port=%s -a host=%s -a connect_to=%s'
-                 %(rdn, transport.ip, transport.port, transport.host, transport.remote.rdn))
+            cmd =('immcfg -c OtpdiaTransportTcp %s -a address=%s -a port=%s -a host=%s -a connect_to=%s -a service=%s'
+                 %(rdn, transport.local_ip, transport.local_port, transport.host, transport.remote.rdn, SERVICE_DN))
             self.run_command(cmd)
+
+    def add_otpdia_transport_sctp(self, transport):
+        rdn = transport.rdn
+         
+        if not transport.remote:
+            cmd = ('immcfg -c OtpdiaTransportEsctp %s -a address=%s -a port=%s -a host=%s -a service=%s' 
+                  %(rdn, transport.local_ip, transport.local_port, transport.host, SERVICE_DN))
             
-    def add_otpdiahost(self, remote):
-        rdn, ip, port = remote.rdn, remote.ip, remote.port
-        cmd = "immcfg -c OtpdiaHost %s -a ip=%s -a port=%s" %(rdn, ip, port)
-        self.run_command(cmd)        
+            self.run_command(cmd)
+        else:
+            cmd =('immcfg -c OtpdiaTransportEsctp %s -a address=%s -a port=%s -a host=%s -a connect_to=%s -a service=%s'
+                 %(rdn, transport.local_ip, transport.local_port, transport.host, transport.remote.rdn, SERVICE_DN))
+            self.run_command(cmd)
     
     def load_imm_object(self, class_name):
         # immfind and immlist command execute immediately
@@ -185,22 +178,23 @@ class IMMCFG():
 
 
 class Transport(object):
-    def __init__(self, local_ip="", local_port="", remote=None, host=':all'):
-        self.rdn = ""
+    def __init__(self, rdn="", local_ip="", local_port="", remote=None, mode='TCP' , host=':all'):
+        self.rdn = rdn
         self.local_ip   = local_ip
         self.local_port = local_port
-        self.connect_to = remote
+        self.remote = remote
         self.host = host
+        self.mode = mode
         
     def to_string(self):
-        if self.local_port == '0': 
-            return ("Listening %s(%s) at host %s" %(self.local_ip, self.local_port), self.host)
+        if self.local_port != '0': 
+            return ("Listening %s(%s) \nhost = %s \nmode = %s" %(self.local_ip, self.local_port, self.host, self.mode))
         else:
-            return ("Connect from %s(%s) at host %s to remote %s" %(self.local_ip, 
+            return ("Connect from %s(%s) to remote %s \nhost = %s \nmode = %s" %(self.local_ip, 
                                                                     self.local_port, 
-                                                                    self.host, 
-                                                                    self.remote.to_string()))
-            
+                                                                    self.remote.to_string(),
+                                                                    self.host,
+                                                                    self.mode))
 
 class Remote(object):
     def __init__(self, rdn, ip, port):
@@ -233,20 +227,28 @@ class IMM(object):
             otp_t = self.transport_map[k]
             
             t = Transport()
-            t.rdn = otp_t.get("otpdiaTransportTcp")
+            
+            if otp_t.get("SaImmAttrClassName") == "OtpdiaTransportTcp":
+                t.mode = "TCP"
+                t.rdn = otp_t.get("otpdiaTransportTcp") 
+            else:
+                t.mode = "SCTP"
+                t.rdn = otp_t.get("otpdiaTransportEsctp")
+            
+                
             t.local_ip = otp_t.get("address")
             t.local_port = otp_t.get("port")
             
-            connect_to = otp_t.get("connect_to")
-            if connect_to != NULL_VALUE:
-                t.connect_to = None
+            remote_rdn = otp_t.get("connect_to")
+            if remote_rdn == NULL_VALUE:
+                t.remote = None
             else:
-                otp_r = self.remote_map[connect_to]
+                otp_r = self.remote_map[remote_rdn]
                 r = Remote(otp_r.get("otpdiaHost"), otp_r.get("address"), otp_r.get("port"))
-                t.connect_to = r
+                t.remote = r
             
             self.transport_list[t.rdn] = t
-                
+            
     def load_imm_object(self):
         self.transport_map=self.immcfg.load_imm_object("OtpdiaTransportTcp")
         self.remote_map = self.immcfg.load_imm_object("OtpdiaHost")
@@ -254,75 +256,66 @@ class IMM(object):
         self.build()
     
      
-   
-    def append_transport(self,transport, peer=None):
+    def add_tcp_transport(self, transport):
         
-#         selector_id = selector.rdn.split('otpdiaSelector=')[1]
-#         
-#         # by default: append the new node to the end of linked list
-#         
-#         node_id = 0
-#         while True:
-#             peer_rdn = "otpdiaDomain=peer_%s.%d" %(selector_id, node_id+1)
-#             if not self.domain_map.has_key(peer_rdn):
-#                 break;
-#             node_id += 1
-#             
-#         peer_obj = Domain(peer_rdn, peer[0], peer[1])
-#          
-#         link_rdn = "otpdiaCons=%s.%d" %(selector_id, node_id + 1)
-#         link_node = LinkNode(link_rdn, peer_obj, None, selector)
-#         
-#         node = selector.link_head
-#         while node:
-#             if not node.next:
-#                 node.next = link_node
-#                 break
-#             else:
-#                 node = node.next
-#         
-#         
-#         self.immcfg.add_otpdiadomain(link_node.data)
-#         self.immcfg.add_otpdiacons(link_node)
+        if self.transport_list.has_key(transport.rdn):
+            print "ERROR: cannot create second listening transportTcp"
+            return
         
-        return None
+        if transport.remote:
+            self.immcfg.add_otpdia_host(transport.remote)
+            
+        self.immcfg.add_otpdia_transport_tcp(transport)
     
-    def modify_domain(self, rdn, hosts, realm):
+    def add_sctp_transport(self, transport):
+        if self.transport_list.has_key(transport.rdn):
+            print "ERROR: cannot create second listening transportEsctp"
+            return
         
-        self.immcfg.modify_imm_object(rdn, 'host', hosts)
-        self.immcfg.modify_imm_object(rdn, 'realm', realm)
+        if transport.remote: 
+            self.immcfg.add_otpdia_host(transport.remote) 
+        
+        self.immcfg.add_otpdia_transport_sctp(transport)
+        
+    
+    def modify_transport(self, transport, ip, port):
+        
+        if transport.local_ip != ip:
+            self.immcfg.modify_imm_object(transport.rdn, 'address', ip)
+        
+        if transport.local_port != port:
+            self.immcfg.modify_imm_object(transport.rdn, 'port', port)
                 
 
-    def rm_transport(self, link_node):
-        pass
-            
-            
-#             
-#     def find_selector(self, apps, host_list, realm):
-#         result=[]
-#         for s in self.linked_lists.values():
-#             
-#             if not is_sub_list(apps, s.matcher.app_list):
-#                 continue
-# 
-#             if realm != s.matcher.dest.realm: continue
-#             
-#             if not is_sub_list(host_list, s.matcher.dest.host_list): continue
-#             
-#             result.append(s)
-#             
-#         return result  
+    def rm_transport(self, transport):
+        self.immcfg.rm_imm_object(transport.rdn)
+        
+        self.rm_remote(transport.remote)
     
-#     def get_selector_id(self):
-#         result = []
-#         for s in self.selector_map.values():
-#             result.append(int(s.rdn[-1]))
-#         
-#         if not result:
-#             return 1
-#         else: 
-#             return sorted(result)[-1] + 1
-#             
+    def rm_remote(self, remote):
+        if not remote:
+            return 
+        
+        # rm remote if no more transport refer to it
+        count = 0
+        for each in self.transport_list.values():
+            if each.remote == remote:
+                count +=1
+                
+        if count == 1:
+            self.immcfg.rm_imm_object(remote.rdn)
+            
+    def allocate_transport_rdn(self, mode):
+        i = 0
+        while True:
+            i += 1
+            if mode == "TCP":
+                rdn = "otpdiaTransportTcp=%d" %(i)
+            else:
+                rdn = "otpdiaTransportEsctp=%d" %(i)
+                         
+            if not self.transport_list.has_key(rdn):
+                return rdn
                     
 def is_sub_list(listA, listB):
     for each in listA: 
@@ -330,7 +323,7 @@ def is_sub_list(listA, listB):
         
     return True
 
-class Connection(object):
+class Record(object):
     def __init__(self, record_id, transport):
         self.transport = transport
         self.record_id = record_id
@@ -338,16 +331,13 @@ class Connection(object):
     def to_string(self):
         str_= ""
         str_ += "id:         " + str(self.record_id) + '\n'
-        str_ += "local_ip:   " + self.transport.local_ip + "\n"
-        str_ += "local_port: " + self.transport.local_port + '\n'
-        str_ += "remote_ip:  " + self.transport.remote.ip + '\n'
-        str_ += "remote_port:" + self.transport.remote.port +'\n'
+        str_ += self.transport.to_string() +'\n'
         str_ += "\n"
         return str_
              
                 
 
-class ConnectionList(object):
+class TransportList(object):
     def __init__(self, imm):
         self.imm = imm
         
@@ -359,14 +349,14 @@ class ConnectionList(object):
             record_id += 1
             transport = self.imm.transport_list[rdn]
 
-            c = Connection(record_id, transport)
+            c = Record(record_id, transport)
             
             self.records[rdn] = c
                     
         self.last_record_id = record_id
     
           
-    def to_string(self, f="TABLE"):
+    def to_string(self, f="TEXT"):
         if f == "TABLE":
             return self.to_table()
         else:
@@ -389,11 +379,11 @@ class ConnectionList(object):
         return None    
     
     def to_table(self):
-        head = "| id |" +" "*10 +"local "+" "*10 + "|" + " "*10 + "remote" + " "*10 + "|\n"
+        head = "| id |" +" "*10 +"local "+" "*10 + "|" + " "*10 + "remote" + " "*10 + "|   mode  " + "\n"
         
         line_separator = "|" + "-"*len(head) + "|\n"
         
-        str_ = "Connection List:  \n"
+        str_ = "Transport List:  \n"
         str_ += line_separator + head + line_separator
 
         tmp = self.sort()
@@ -401,11 +391,21 @@ class ConnectionList(object):
         for k in sorted(tmp.keys()):
             record = tmp[k]
             
-            str_ += ("|%4d|%-26s|%-26s|%10s\n"
+            t = record.transport
+            r = t.remote
+            
+            local_str = "%s(%s)" %(t.local_ip, t.local_port)
+            
+            if r == None:
+                remote_str = ""
+            else:
+                remote_str = "%s(%s)" %(r.ip, r.port)
+            
+            str_ += ("|%-4d|  %-24s|  %-24s|%8s\n"
                         %(record.record_id, 
-                        "",
-                        "",
-                        "TCP")
+                        local_str,
+                        remote_str,
+                        t.mode)
                     )
             
             str_ += line_separator
@@ -415,7 +415,7 @@ class ConnectionList(object):
     def to_text(self):
         line_separator = "" + "-"*32 + "\n"
         
-        str_ = "Connection List Text:  \n"
+        str_ = "Transport List:  \n"
 
         tmp = self.sort()
             
@@ -454,65 +454,69 @@ class ConnectionList(object):
             print "ERROR: record not exit with record id as %d" %(record_id)
             return
         
-#         
-#         if field == 'peer':
-#             self.imm.modify_domain(record.link_node.data.rdn, value[0], value[1])
-#         
-#         else:
-#             print "WARNING, todo modify %s" %(field) 
-#             return      
+         
+        if field == 'local':
+            local_ip = value[0]
+            local_port = value[1]
+            self.imm.modify_transport(record.transport,local_ip, local_port)
+         
+        else:
+            print "WARNING, todo modify %s" %(field) 
+            return      
 
 
-#         self.imm.immcfg.execute()
+        self.imm.immcfg.execute()
     
+    def add(self, mode, local, remote=None):
         
+        if remote:
+            rdn = "otpdiaHost=" +":".join(remote)
+            r = Remote(rdn,remote[0], remote[1])
+        
+        if mode == "TCP":
+            class_name = "otpdiaTransportTcp"
+            func = self.imm.add_tcp_transport
+        elif mode == "SCTP":
+            class_name = "otpdiaTransportEsctp"
+            func = self.imm.add_sctp_transport
+        else:
+            print "ERROR: unknown mode " + mode
+            return 
+        
+        if not remote:
+            print local, remote
+            # listening transport is unique
+            t = Transport("%s=listening" %(class_name), 
+                          local[0], local[1] )
+            func(t)
+            
+        else:
+            rdn = self.imm.allocate_transport_rdn(mode)
+            t = Transport(rdn, local_ip=local[0], local_port=local[1], remote=r, mode=mode)
+            func(t)
+
+            
+        self.imm.immcfg.execute()
+            
 
 def list_route_table(output_format):
     imm = IMM()
     imm.load_imm_object()
-    cl = ConnectionList(imm)
+    cl = TransportList(imm)
     print cl.to_string(output_format)    
 
 def add(args):
     
     imm = IMM()
     imm.load_imm_object()
-#     route_table = RouteTable(imm)
-#     
-#     app = args.apps
-#     if not app:
-#         print "please provide apps, e.g. SWx"
-#         return 
-#     
-#     appid = [TO_APP_ID[app],]
-#     
-#     dest = ast.literal_eval(args.dest)
-#     peer = ast.literal_eval(args.peer)
-#     
-#     
-#     if dest[0][0] == '*' or dest[0][0] == '':
-#         dest[0][0] = NULL_VALUE
-#     
-#     print appid, dest, peer
-#     
-#     route_table.add(appid, dest, peer )
+
 
 def modify(args):
     if not args.record:
         print "please provide the id of route record to be modified"
         print "use list cmd to print the route table"
         return 
-
-#     imm = IMM()
-#     imm.load_imm_object()
-#     route_table = RouteTable(imm)
-#     
-#     peer = ast.literal_eval(args.peer)
-#     print peer
-#     
-#     if args.peer:
-#         route_table.modify(int(args.record), 'peer', peer)
-    
+ 
                     
 def rm(args):
     if not args.record:
@@ -522,7 +526,7 @@ def rm(args):
 
     imm = IMM()
     imm.load_imm_object()
-    cl = ConnectionList(imm)
+    cl = TransportList(imm)
     
     
     cl.rm(int(args.record))

@@ -80,7 +80,7 @@ class OtpdiaObject(object):
 
 class IMMCFG():
     def __init__(self):
-        self.SERVICE_DN="otpdiaService=epc_aaa,otpdiaProduct=AAAServer"
+        self.SERVICE_DN="otpdiaService=epc_aaa,otpdiaProduct=IPWorksAAA"
         
         self.immcfg_cmd_list=[]
         

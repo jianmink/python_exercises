@@ -196,7 +196,18 @@ class TestRouteTable(unittest.TestCase):
         print rt.to_string()
         self.assertEqual(cmd_list, get_cmd_list())
           
+    def test_rm_linked_list(self):
+        print "\n test_rm_linked_list"
          
+        cmd_list = ["immcfg -d otpdiaSelector=hss.com",
+            "immcfg -d otpdiaDomain=_hss.com",
+            "immcfg -d otpdiaCons=hss1hss2_hss.com",
+            "immcfg -d otpdiaDomain=hss1hss2_hss.com"]
+ 
+        rt = self.dm.create_route_table_w_hss_loadsharing()
+        rt.rm(1)
+ 
+        self.assertEqual(cmd_list, get_cmd_list()) 
       
     def test_add_one_linked_list(self):
           
@@ -210,7 +221,7 @@ class TestRouteTable(unittest.TestCase):
                     "immcfg -a host+=hss1 otpdiaDomain=peer_1.1",
                     "immcfg -c OtpdiaDomain otpdiaDomain=dest_1.1 -a realm=hss.com",
                     "immcfg -c OtpdiaCons otpdiaCons=1.1 -a head=otpdiaDomain=peer_1.1",
-                    'immcfg -c OtpdiaSelector otpdiaSelector=1 -a peer=otpdiaCons=1.1 -a  service="otpdiaService=epc_aaa,otpdiaProduct=AAAServer"',
+                    'immcfg -c OtpdiaSelector otpdiaSelector=1 -a peer=otpdiaCons=1.1 -a  service="otpdiaService=epc_aaa,otpdiaProduct=IPWorksAAA"',
                     "immcfg -a applicationId+=16777265 otpdiaSelector=1",
                     "immcfg -a destination+=otpdiaDomain=dest_1.1 otpdiaSelector=1"
                     ]
@@ -253,7 +264,7 @@ class TestRouteTable(unittest.TestCase):
         "immcfg -a host+=hss4 otpdiaDomain=peer_1.1",
         "immcfg -c OtpdiaDomain otpdiaDomain=dest_1.1 -a realm=gw.com",
         "immcfg -c OtpdiaCons otpdiaCons=1.1 -a head=otpdiaDomain=peer_1.1",
-        'immcfg -c OtpdiaSelector otpdiaSelector=1 -a peer=otpdiaCons=1.1 -a  service="otpdiaService=epc_aaa,otpdiaProduct=AAAServer"',
+        'immcfg -c OtpdiaSelector otpdiaSelector=1 -a peer=otpdiaCons=1.1 -a  service="otpdiaService=epc_aaa,otpdiaProduct=IPWorksAAA"',
         "immcfg -a applicationId+=16777265 otpdiaSelector=1",
         "immcfg -a applicationId+=16777250 otpdiaSelector=1",
         "immcfg -a destination+=otpdiaDomain=dest_1.1 otpdiaSelector=1"
