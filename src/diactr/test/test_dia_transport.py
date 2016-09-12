@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import unittest
-from dia_connection_ctr import *
+from dia_transport_ctr import *
 
 # IMMCFG_SLEEP_TIME = 0
 
@@ -27,7 +27,7 @@ class DataMama(object):
         %s                                                 SA_STRING_T  %s
         address                                            SA_STRING_T  %s
         port                                               SA_STRING_T  %s
-        connect_to                                         SA_NAME_T    %s           
+        connectTo                                          SA_NAME_T    %s           
         host                                               SA_STRING_T  %s  
         SaImmAttrImplementerName                           SA_STRING_T  C-diameter 
         SaImmAttrClassName                                 SA_STRING_T  %s
@@ -69,21 +69,21 @@ class DataMama(object):
         r_map = {r.get("otpdiaHost"):r}
          
         imm = IMM(t_map, r_map) 
-        cl = TransportList(imm)
-        return cl
+        tl = TransportList(imm)
+        return tl
     
     def create_single_hss_sctp(self):
-        t1 = self.create_otpdia_transport_object("Esctp", "192.168.20.13", "3868", NULL_VALUE, ":all")
+        t1 = self.create_otpdia_transport_object("SctpE", "192.168.20.13", "3868", NULL_VALUE, ":all")
         
         r = self.create_otpdia_host_object("hss1","192.168.20.1", "3869")
-        t2 = self.create_otpdia_transport_object("Esctp", "192.168.20.13", "0", "hss1", ":all")
+        t2 = self.create_otpdia_transport_object("SctpE", "192.168.20.13", "0", "hss1", ":all")
                   
-        t_map = {t1.get("otpdiaTransportEsctp"):t1, t2.get("otpdiaTransportEsctp"):t2 }
+        t_map = {t1.get("otpdiaTransportSctpE"):t1, t2.get("otpdiaTransportSctpE"):t2 }
         r_map = {r.get("otpdiaHost"):r}
          
         imm = IMM(t_map, r_map) 
-        cl = TransportList(imm)
-        return cl
+        tl = TransportList(imm)
+        return tl
         
 class TestConnection(unittest.TestCase):
     dm = DataMama()
@@ -91,118 +91,141 @@ class TestConnection(unittest.TestCase):
     def test_single_hss_tcp(self):
         print "\n test_single_hss_tcp"
           
-        cl = self.dm.create_single_hss_tcp()
+        tl = self.dm.create_single_hss_tcp()
           
-        self.assertEqual(2, len(cl.records))
+        self.assertEqual(2, len(tl.records))
           
-        print cl.to_string()
-        print cl.to_string("TABLE")
+        print tl.to_string()
+        print tl.to_string("TABLE")
         
     def test_single_hss_sctp(self):
         print "\n test_single_hss_sctp"
           
-        cl = self.dm.create_single_hss_sctp()
+        tl = self.dm.create_single_hss_sctp()
           
-        self.assertEqual(2, len(cl.records))
+        self.assertEqual(2, len(tl.records))
           
-        print cl.to_string()
-        print cl.to_string("TABLE")
+        print tl.to_string()
+        print tl.to_string("TABLE")
           
     def test_rm_listening_transport(self):
         print "\n test_rm_listening_transport"
-          
+           
         cmd_list = [
-            "immcfg -d otpdiaTransportTcp=listening"]
-  
-        cl = self.dm.create_single_hss_tcp()
-        cl.rm(1)
-  
+            "immcfg -d otpdiaTransportTcp=listening,%s" %(SERVICE_DN)]
+   
+        tl = self.dm.create_single_hss_tcp()
+        tl.rm(1)
+   
         self.assertEqual(cmd_list, get_cmd_list())
-
+ 
     def test_rm_connect_to_hss1(self):
         print "\n test_rm_connect_to_hss1"
-          
-        cmd_list = ["immcfg -d otpdiaTransportTcp=connect_to_hss1",
-            "immcfg -d otpdiaHost=hss1"]
-  
-        cl = self.dm.create_single_hss_tcp()
-        cl.rm(2)
-  
+           
+        cmd_list = ["immcfg -d otpdiaTransportTcp=connect_to_hss1,%s" %(SERVICE_DN),
+            "immcfg -d otpdiaHost=hss1,%s" %(PRODUCT_DN)]
+   
+        tl = self.dm.create_single_hss_tcp()
+        tl.rm(2)
+   
         self.assertEqual(cmd_list, get_cmd_list())
-     
-          
+      
+           
     def test_add_listening_transport(self):
-          
+            
         print "\n test_add_listening_transport"
-          
+            
         imm = IMM()
-        cl = TransportList(imm)
-          
-        cl.add("TCP",  local=('192.168.20.13', '3868'))
-          
+        tl = TransportList(imm)
+            
+        tl.add("TCP",  local=('192.168.20.13', '3868'))
+            
         cmd_list = [
-        "immcfg -c OtpdiaTransportTcp otpdiaTransportTcp=listening -a address=192.168.20.13 -a port=3868 -a host=:all -a service=%s" %(SERVICE_DN)
+        "immcfg -c OtpdiaTransportTcp otpdiaTransportTcp=listening,%s -a address=192.168.20.13 -a port=3868 -a host=:all" %(SERVICE_DN)
         ]
-          
-        print cl.to_string()
-          
+            
+        print tl.to_string()
+            
         self.assertEqual(cmd_list, get_cmd_list())
-        
-        
+          
+          
     def test_add_listening_sctp_transport(self):
-          
+            
         print "\n test_add_listening_transport"
-          
+            
         imm = IMM()
-        cl = TransportList(imm)
-          
-        cl.add("SCTP", local=('192.168.20.13', '3868'))
-          
+        tl = TransportList(imm)
+            
+        tl.add("SCTP", local=('192.168.20.13', '3868'))
+            
         cmd_list = [
-        "immcfg -c OtpdiaTransportEsctp otpdiaTransportEsctp=listening -a address=192.168.20.13 -a port=3868 -a host=:all -a service=%s" %(SERVICE_DN)
+        "immcfg -c OtpdiaTransportSctpE otpdiaTransportSctpE=listening,%s -a address=192.168.20.13 -a port=3868 -a host=:all" %(SERVICE_DN)
         ]
-          
-        print cl.to_string()
-          
+            
+        print tl.to_string()
+            
         self.assertEqual(cmd_list, get_cmd_list())
-
-
+ 
+ 
     def test_add_connect_to_hss_transport(self):
-          
+            
         print "\n test_add_connect_to_hss_transport"
-          
+            
         imm = IMM()
-        cl = TransportList(imm)
-          
-        cl.add("TCP",  local=('192.168.20.13', '0'), remote=('192.168.20.1', '3869'))
-          
+        tl = TransportList(imm)
+            
+        tl.add("TCP",  local=('192.168.20.13', '0'), remote=('192.168.20.1', '3869'))
+            
         cmd_list = [
-        "immcfg -c OtpdiaHost otpdiaHost=192.168.20.1:3869 -a address=192.168.20.1 -a port=3869",
-        "immcfg -c OtpdiaTransportTcp otpdiaTransportTcp=1 -a address=192.168.20.13 -a port=0 -a host=:all -a connect_to=otpdiaHost=192.168.20.1:3869 -a service=%s" %(SERVICE_DN)
+        "immcfg -c OtpdiaHost otpdiaHost=192.168.20.1:3869,%s -a address=192.168.20.1 -a port=3869" %(PRODUCT_DN),
+        "immcfg -c OtpdiaTransportTcp otpdiaTransportTcp=1,%s -a address=192.168.20.13 -a port=0 -a host=:all -a connectTo=otpdiaHost=192.168.20.1:3869" 
+            %(SERVICE_DN)
         ]
-          
-        print cl.to_string()
+            
+        print tl.to_string()
         print get_cmd_list()
-          
-        self.assertEqual(cmd_list, get_cmd_list())        
-  
-    def test_modify_transport(self):
-           
-        print "\n test_modify_local_ip"
-          
+            
+        self.assertEqual(cmd_list, get_cmd_list())  
+         
+     
+    def test_add_connect_to_hss_transport_sctp(self):
+            
+        print "\n test_add_connect_to_hss_transport_sctp"
+            
+        imm = IMM()
+        tl = TransportList(imm)
+            
+        tl.add("SCTP",  local=('192.168.20.13', '0'), remote=('192.168.20.1', '3869'))
+            
         cmd_list = [
-        "immcfg -a address=192.168.20.14 otpdiaTransportTcp=listening"
+        "immcfg -c OtpdiaHost otpdiaHost=192.168.20.1:3869,%s -a address=192.168.20.1 -a port=3869" %(PRODUCT_DN),
+        "immcfg -c OtpdiaTransportSctpE otpdiaTransportSctpE=1,%s -a address=192.168.20.13 -a port=0 -a host=:all -a connectTo=otpdiaHost=192.168.20.1:3869" 
+            %(SERVICE_DN)
         ]
-           
-        cl = self.dm.create_single_hss_tcp()
-           
-        cl.modify(1, 'local',  ('192.168.20.14','3868'))
-           
-        print cl.to_string()
-           
-          
+            
+        print tl.to_string()
+        print get_cmd_list()
+            
+        self.assertEqual(cmd_list, get_cmd_list())       
+               
+    
+    def test_modify_transport(self):
+             
+        print "\n test_modify_local_ip"
+            
+        cmd_list = [
+        "immcfg -a address=192.168.20.14 otpdiaTransportTcp=listening,%s" %(SERVICE_DN)
+        ]
+             
+        tl = self.dm.create_single_hss_tcp()
+             
+        tl.modify(1, 'local',  ('192.168.20.14','3868'))
+             
+        print tl.to_string()
+             
+            
         self.assertEqual(cmd_list, get_cmd_list())
-          
+            
 
 
 

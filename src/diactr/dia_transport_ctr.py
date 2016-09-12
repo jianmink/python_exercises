@@ -11,6 +11,7 @@ IMMCFG_SLEEP_TIME = 0
 LOWEST_PRI = 999
 
 SERVICE_DN="otpdiaService=epc_aaa,otpdiaProduct=IPWorksAAA"
+PRODUCT_DN="otpdiaProduct=IPWorksAAA"
 
 
 # todo list
@@ -53,8 +54,6 @@ class OtpdiaObject(object):
 
 class IMMCFG():
     def __init__(self):
-        self.SERVICE_DN="otpdiaService=epc_aaa,otpdiaProduct=AAAServer"
-        
         self.immcfg_cmd_list=[]
         
     
@@ -83,35 +82,38 @@ class IMMCFG():
                     self.run_command("immcfg -a %s+=%s %s" %(key, v, rdn))
     
     def add_otpdia_host(self, remote):
+        dn = remote.rdn + ',' + PRODUCT_DN
         cmd = ('immcfg -c OtpdiaHost %s -a address=%s -a port=%s' 
-               %(remote.rdn, remote.ip, remote.port))
+               %(dn, remote.ip, remote.port))
         
         self.run_command(cmd)              
     
     def add_otpdia_transport_tcp(self, transport):
         rdn = transport.rdn
+        dn = rdn + ',' + SERVICE_DN
          
         if not transport.remote:
-            cmd = ('immcfg -c OtpdiaTransportTcp %s -a address=%s -a port=%s -a host=%s -a service=%s' 
-                  %(rdn, transport.local_ip, transport.local_port, transport.host, SERVICE_DN))
+            cmd = ('immcfg -c OtpdiaTransportTcp %s -a address=%s -a port=%s -a host=%s' 
+                  %(dn, transport.local_ip, transport.local_port, transport.host))
             
             self.run_command(cmd)
         else:
-            cmd =('immcfg -c OtpdiaTransportTcp %s -a address=%s -a port=%s -a host=%s -a connect_to=%s -a service=%s'
-                 %(rdn, transport.local_ip, transport.local_port, transport.host, transport.remote.rdn, SERVICE_DN))
+            cmd =('immcfg -c OtpdiaTransportTcp %s -a address=%s -a port=%s -a host=%s -a connectTo=%s'
+                 %(dn, transport.local_ip, transport.local_port, transport.host, transport.remote.rdn))
             self.run_command(cmd)
 
     def add_otpdia_transport_sctp(self, transport):
         rdn = transport.rdn
+        dn = rdn + ',' + SERVICE_DN
          
         if not transport.remote:
-            cmd = ('immcfg -c OtpdiaTransportEsctp %s -a address=%s -a port=%s -a host=%s -a service=%s' 
-                  %(rdn, transport.local_ip, transport.local_port, transport.host, SERVICE_DN))
+            cmd = ('immcfg -c OtpdiaTransportSctpE %s -a address=%s -a port=%s -a host=%s' 
+                  %(dn, transport.local_ip, transport.local_port, transport.host))
             
             self.run_command(cmd)
         else:
-            cmd =('immcfg -c OtpdiaTransportEsctp %s -a address=%s -a port=%s -a host=%s -a connect_to=%s -a service=%s'
-                 %(rdn, transport.local_ip, transport.local_port, transport.host, transport.remote.rdn, SERVICE_DN))
+            cmd =('immcfg -c OtpdiaTransportSctpE %s -a address=%s -a port=%s -a host=%s -a connectTo=%s'
+                 %(dn, transport.local_ip, transport.local_port, transport.host, transport.remote.rdn))
             self.run_command(cmd)
     
     def load_imm_object(self, class_name):
@@ -123,7 +125,8 @@ class IMMCFG():
             text = self.run_command_impl(cmd)
             s = OtpdiaObject()
             s.parse(text)
-            dict_[line.rstrip()]=s
+            rdn = line.rstrip().split(',')[0]
+            dict_[rdn]=s
         
         return dict_
     
@@ -233,13 +236,13 @@ class IMM(object):
                 t.rdn = otp_t.get("otpdiaTransportTcp") 
             else:
                 t.mode = "SCTP"
-                t.rdn = otp_t.get("otpdiaTransportEsctp")
+                t.rdn = otp_t.get("otpdiaTransportSctpE")
             
                 
             t.local_ip = otp_t.get("address")
             t.local_port = otp_t.get("port")
             
-            remote_rdn = otp_t.get("connect_to")
+            remote_rdn = otp_t.get("connectTo")
             if remote_rdn == NULL_VALUE:
                 t.remote = None
             else:
@@ -250,7 +253,9 @@ class IMM(object):
             self.transport_list[t.rdn] = t
             
     def load_imm_object(self):
-        self.transport_map=self.immcfg.load_imm_object("OtpdiaTransportTcp")
+        d1=self.immcfg.load_imm_object("OtpdiaTransportTcp")
+        d2 = self.immcfg.load_imm_object("OtpdiaTransportSctpE")
+        self.transport_map = dict(d1.items() + d2.items())
         self.remote_map = self.immcfg.load_imm_object("OtpdiaHost")
             
         self.build()
@@ -280,15 +285,16 @@ class IMM(object):
     
     def modify_transport(self, transport, ip, port):
         
+        dn = transport.rdn +',' + SERVICE_DN
         if transport.local_ip != ip:
-            self.immcfg.modify_imm_object(transport.rdn, 'address', ip)
+            self.immcfg.modify_imm_object(dn, 'address', ip)
         
         if transport.local_port != port:
-            self.immcfg.modify_imm_object(transport.rdn, 'port', port)
+            self.immcfg.modify_imm_object(dn, 'port', port)
                 
 
     def rm_transport(self, transport):
-        self.immcfg.rm_imm_object(transport.rdn)
+        self.immcfg.rm_imm_object(transport.rdn+','+SERVICE_DN)
         
         self.rm_remote(transport.remote)
     
@@ -303,7 +309,7 @@ class IMM(object):
                 count +=1
                 
         if count == 1:
-            self.immcfg.rm_imm_object(remote.rdn)
+            self.immcfg.rm_imm_object(remote.rdn+','+PRODUCT_DN)
             
     def allocate_transport_rdn(self, mode):
         i = 0
@@ -312,7 +318,7 @@ class IMM(object):
             if mode == "TCP":
                 rdn = "otpdiaTransportTcp=%d" %(i)
             else:
-                rdn = "otpdiaTransportEsctp=%d" %(i)
+                rdn = "otpdiaTransportSctpE=%d" %(i)
                          
             if not self.transport_list.has_key(rdn):
                 return rdn
@@ -470,14 +476,14 @@ class TransportList(object):
     def add(self, mode, local, remote=None):
         
         if remote:
-            rdn = "otpdiaHost=" +":".join(remote)
+            rdn = "otpdiaHost=" + ":".join(remote)
             r = Remote(rdn,remote[0], remote[1])
         
         if mode == "TCP":
             class_name = "otpdiaTransportTcp"
             func = self.imm.add_tcp_transport
         elif mode == "SCTP":
-            class_name = "otpdiaTransportEsctp"
+            class_name = "otpdiaTransportSctpE"
             func = self.imm.add_sctp_transport
         else:
             print "ERROR: unknown mode " + mode
@@ -499,17 +505,34 @@ class TransportList(object):
         self.imm.immcfg.execute()
             
 
-def list_route_table(output_format):
+def list_transport_list(output_format):
     imm = IMM()
     imm.load_imm_object()
-    cl = TransportList(imm)
-    print cl.to_string(output_format)    
+    tl = TransportList(imm)
+    print tl.to_string(output_format)    
 
 def add(args):
-    
     imm = IMM()
     imm.load_imm_object()
-
+    tl = TransportList(imm)
+    
+    if not args.local:
+        print "please provide the local ip and port "
+        return
+    
+    local = args.local[1:-1].split(',')
+    
+    remote = None
+    if args.remote:
+        remote = args.remote[1:-1].split(',')
+        print remote
+        
+    mode = "TCP"
+    if args.mode:
+        mode = args.mode
+    
+    tl.add(mode, local, remote)
+    
 
 def modify(args):
     if not args.record:
@@ -526,17 +549,17 @@ def rm(args):
 
     imm = IMM()
     imm.load_imm_object()
-    cl = TransportList(imm)
+    tl = TransportList(imm)
     
     
-    cl.rm(int(args.record))
+    tl.rm(int(args.record))
 
 if __name__ == "__main__":
         
     '''
     Example:
         python ./dia_route_ctr.py --cmd list
-        python ./dia_route_ctr.py --cmd add --localip --localport --remoteip --remoteport  --tcpmode        
+        python ./dia_route_ctr.py --cmd add --local --remote  --mode        
         python ./dia_route_ctr.py --cmd modify --record 1 
         python ./dia_route_ctr.py --cmd rm --record 1
     '''
@@ -545,13 +568,11 @@ if __name__ == "__main__":
     parser.add_argument("--cmd",  choices=('list', 'add', 'rm', 'modify'))
     
     # for add cmd
-    parser.add_argument("--localip", type=str)
-    parser.add_argument("--localport", type=str)
-    parser.add_argument("--remoteip", type=str)
-    parser.add_argument("--remoteport", type=str)
+    parser.add_argument("--local", type=str)
+    parser.add_argument("--remote", type=str)
     
-    # for rm cmd
     parser.add_argument("--record")
+    parser.add_argument("--mode")
     
     # for list cmd
     parser.add_argument("--format", default="TEXT")
@@ -559,7 +580,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.cmd == "list" :
-        list_route_table(args.format)
+        list_transport_list(args.format)
     elif args.cmd == "add" :
         add(args)
     elif args.cmd == "rm":
