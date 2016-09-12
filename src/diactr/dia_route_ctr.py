@@ -4,6 +4,14 @@ import argparse
 import copy
 import ast
 
+
+import sys
+
+from tabulate import tabulate
+from otpdia import OtpdiaObject, ATTRIBUTE_HAS_MULTI_VALUE
+from immcmd import IMMCFG
+
+
 TO_APP_NAME = {
 '16777250':"STa",
 '16777265':"SWx",
@@ -26,190 +34,6 @@ NULL_VALUE = "<Empty>"
 WILDCARD_SYMBOL = "*"
 IMMCFG_SLEEP_TIME = 0
 LOWEST_PRI = 999
-
-# function list:
-# 1. list route table
-# 2. list route record in text mode
-# 3. rm route record by record id
-# 4. add new route record
-# 5. modify peer info
-
-
-# todo list
-# validate
-# support multiple value of otpdiaSelector.dest 
-# support transaction for immcfg cmd, use "immcfg -f ./tmp/dia_route.xml" 
-# support shell mode 
-# 
-
-
-ATTRIBUTE_HAS_MULTI_VALUE = ("host", "applicationId") #, "dest",  )
-
-g_imm_cmd_list = None # For debugging
-
-def get_cmd_list():
-    global g_imm_cmd_list
-    return g_imm_cmd_list
-
-def set_cmd_list(cmd_list):
-    global g_imm_cmd_list
-    g_imm_cmd_list = copy.deepcopy(cmd_list)
-    
-
-class OtpdiaObject(object):
-    def __init__(self):
-        self.key_value_pairs={}
-        pass
-    
-    def parse(self, text):
-        for each in text:
-            t = each.split()
-            if len(t) < 3: continue
-                
-            k = t[0].rstrip()
-            if k in ATTRIBUTE_HAS_MULTI_VALUE:
-                value_list = [each.rstrip() for each in t[2:] if '(' not in each ]                
-                self.key_value_pairs[k] = value_list
-            else:
-                v = t[2].rstrip()    
-                self.key_value_pairs[k] = v
-                
-    def get(self, k):
-        return self.key_value_pairs[k]
-    
-
-class IMMCFG():
-    def __init__(self):
-        self.SERVICE_DN="otpdiaService=epc_aaa,otpdiaProduct=IPWorksAAA"
-        
-        self.immcfg_cmd_list=[]
-        
-    
-    def rm_imm_object(self, rdn):
-        self.run_command("immcfg -d " + rdn)
-        
-    def modify_imm_object(self,rdn,key, value):
-        
-        if key not in ATTRIBUTE_HAS_MULTI_VALUE:
-            if not value or value == NULL_VALUE: value = ''
-            self.run_command("immcfg -a %s=%s %s" %(key, value, rdn))
-            
-        else:
-            if len(value) == 0:
-                print "ERROR: empty list"
-                return
-            
-            is_first_element = True
-            for v in value:
-                if v == NULL_VALUE: v = ''
-                
-                if is_first_element:
-                    self.run_command("immcfg -a %s=%s %s" %(key, v, rdn))
-                    is_first_element = False
-                else:
-                    self.run_command("immcfg -a %s+=%s %s" %(key, v, rdn))
-                    
-    
-    def add_otpdiaselector(self, selector):
-        rdn = selector.rdn
-        cmd = 'immcfg -c OtpdiaSelector %s -a peer=%s -a  service="%s"' %(rdn, selector.link_head.rdn, self.SERVICE_DN )
-        self.run_command(cmd)
-        
-        for each in selector.matcher.app_list:
-            cmd = "immcfg -a applicationId+=%s %s" %(each,rdn)
-            self.run_command(cmd)
-            
-        cmd = "immcfg -a destination+=%s %s" %(selector.matcher.dest.rdn,rdn)
-        self.run_command(cmd)
-        
-        
-    def add_otpdiacons(self, link_node, pre_link_obj=None, next_link_obj=None):
-        
-        if not next_link_obj: 
-            cmd = "immcfg -c OtpdiaCons %s -a head=%s" %(link_node.rdn, link_node.data.rdn)
-        else:
-            cmd = "immcfg -c OtpdiaCons %s -a head=%s -a tail=%s" %(link_node.rdn, link_node.data, next_link_obj.rdn)
-        
-        self.run_command(cmd)
-        
-        if pre_link_obj: 
-            cmd = "immcfg -a tail=%s %s" %(link_node.rdn,pre_link_obj.rdn)
-            self.run_command(cmd)
-            
-    
-    def add_otpdiadomain(self, domain):
-        rdn, hosts, realm = domain.rdn, domain.host_list, domain.realm
-        cmd = "immcfg -c OtpdiaDomain %s -a realm=%s" %(rdn, realm)
-        self.run_command(cmd)
-        
-        for host in hosts:
-            if host == NULL_VALUE or not host: 
-                continue
-            
-            cmd = "immcfg -a host+=%s %s" %(host,rdn)
-            self.run_command(cmd)
-    
-    def load_imm_object(self, class_name):
-        # immfind and immlist command execute immediately
-        dict_={}
-        cmd = "immfind -c " + class_name 
-        for line in self.run_command_impl(cmd):
-            cmd = "immlist "+line
-            text = self.run_command_impl(cmd)
-            s = OtpdiaObject()
-            s.parse(text)
-            dict_[line.rstrip()]=s
-        
-        return dict_
-    
-    def execute(self):
-        global g_imm_cmd_list
-        for cmd in self.immcfg_cmd_list:
-            print cmd
-            self.run_command_impl(cmd)
-            
-        set_cmd_list(self.immcfg_cmd_list)  # save the cmd list for debugging only
-        self.immcfg_cmd_list = []
-        
-            
-    def run_command(self, cmd):
-        self.immcfg_cmd_list.append(cmd)
-    
-    def run_command_impl(self, command, time_wait = IMMCFG_SLEEP_TIME, retry = 1):
-        if time_wait != 0: time.sleep(time_wait)
-            
-        exit_code, output = self.run_command_(command)    
-        while exit_code!=0 and retry > 0 :
-            retry -= 1
-            if output and "ERR_BAD_OPERATIONself" in ''.join(output):
-                time.sleep(time_wait)
-                exit_code,output = self.run_command_(command)
-        
-    #     if exit_code != 0:
-    #         print "ERROR: exit program after fail to run " + command
-    #         exit(1) 
-            
-        return output
-                      
-    def run_command_(self, command):
-        p = subprocess.Popen(command,
-                             shell=True,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT)
-        
-        rtn = ''
-        while True:
-            out = p.stdout.read(1)
-            if out == '' and p.poll() != None:
-                break
-            if out != '':
-                rtn += out
-        
-        if 'error' in rtn:
-            print rtn
-        
-        return p.returncode, rtn.split('\n')[:-1]
-
 
 
 class Selector(object):
@@ -457,7 +281,6 @@ class IMM(object):
             self.immcfg.rm_imm_object(link_node.data.rdn)
             
             
-            
     def find_selector(self, apps, host_list, realm):
         result=[]
         for s in self.linked_lists.values():
@@ -501,9 +324,10 @@ class RouteRecord(object):
             It refers to the position in the linked list
     
     '''
-    def __init__(self, record_id, link_node):
+    def __init__(self, record_id, link_node, hash_value):
         self.link_node = link_node
         self.record_id = record_id
+        self.hash_value = hash_value
                         
     def to_string(self):
         m  = self.link_node.selector.matcher
@@ -523,31 +347,26 @@ class RouteTable(object):
     def __init__(self, imm):
         self.imm = imm
         
-        self.records={}
-        record_id = 0
-        
+        self.records=[]
         for rdn in self.imm.linked_lists.keys():
-            
             linked_list = self.imm.linked_lists[rdn]
-            
             link_node = linked_list.link_head 
             
             while link_node:
-                
-                record_id += 1
-                record = RouteRecord(record_id,
-                                     link_node)
-                
-                 
                 k = self.hash(linked_list.matcher.app_list, 
                               linked_list.matcher.dest.host_list, linked_list.matcher.dest.realm,
                               link_node.data.host_list, link_node.data.realm)
                 
-                self.records[k] = record
+                record = RouteRecord(len(self.records)+1,
+                                     link_node, 
+                                     k)
+                
+                
+                self.records.append(record)
                 
                 link_node = link_node.next 
                     
-        self.last_record_id = record_id
+        self.last_record_id = id
     
     def hash(self, apps, dest_hosts, dest_realm, peer_host, peer_realm):
         k =  ''.join(apps)
@@ -556,7 +375,6 @@ class RouteTable(object):
         k += ''.join(peer_host)
         k += peer_realm
         return k
-        
           
     def to_string(self, f="TABLE"):
         if f == "TABLE":
@@ -564,57 +382,37 @@ class RouteTable(object):
         else:
             return self.to_text()
         
-    
-    def sort(self):
-        tmp = {}
-        for record in self.records.values():
-            # sort by record id
-            tmp[record.record_id] = record
-            
-        return tmp
-    
-    
+
     def find_record(self, record_id):
-        for record in self.records.values():
-            if int(record.record_id) == record_id:
-                return record
-        return None    
+        try:
+            return self.records[record_id-1]   
+        except IndexError: 
+            return None    
     
     def to_table(self):
-        head = "| id |  apps  |" +" "*20 + "dest" + " "*20 + "|" + " "*20 + "peer" + " "*20 + "| priority \n"
         
-        line_separator = "|" + "-"*len(head) + "|\n"
+        head = ['id', 'app', 'dest', 'peer', 'priority']
         
-        str_ = "Route Table:  \n"
-        str_ += line_separator + head + line_separator
-
-        tmp = self.sort()
-            
-        for k in sorted(tmp.keys()):
-            record = tmp[k]
-            
+        table = [] 
+        for record in self.records:
             m = record.link_node.selector.matcher
             
-            str_ += ("|%4d|%8s|%-44s|%-44s|%10d\n"
-                        %(record.record_id, ' '.join([TO_APP_NAME[each] for each in m.app_list]),
+            app = ' '.join([TO_APP_NAME[each] for each in m.app_list])
+            
+            table.append([record.record_id, 
+                        app, 
                         m.dest.to_string(),
                         record.link_node.data.to_string(),
-                        record.link_node.get_priority())
-                    )
-            
-            str_ += line_separator
-             
-        return str_
+                        record.link_node.get_priority()])
+                    
+        return tabulate(table, head,  "grid")
 
     def to_text(self):
         line_separator = "" + "-"*32 + "\n"
         
         str_ = "Route Table Text:  \n"
 
-        tmp = self.sort()
-            
-        for k in sorted(tmp.keys()):
-            record = tmp[k]
+        for record in self.records:
             str_ += line_separator 
             str_ += record.to_string()
             str_ += "\n"
@@ -624,36 +422,22 @@ class RouteTable(object):
     def add(self, apps, dest, peer, priority=LOWEST_PRI):
         
         k = self.hash(apps, dest[0], dest[1], peer[0], peer[1])
-        if self.records.has_key(k):
-            print "ERROR: record already exist"
-            return
+ 
+        for each in self.records:
+            if k == each.hash_value:
+                print "ERROR: record already exist"
+                return
         
         result = self.imm.find_selector(apps, dest[0], dest[1])
         
         if len(result) == 0:
             print "case 1: add new linked list"
-
-            self.last_record_id +=1
-            record_id = self.last_record_id
-            
-            node = self.imm.add_linked_list(apps, dest, peer)
-
-            record = RouteRecord(record_id, node)
-            self.records[k] = record
-            
+            self.imm.add_linked_list(apps, dest, peer)
             
         elif len(result) == 1: 
             print "case 2: add link node into exist linked list"
-
-            self.last_record_id +=1
-            record_id = self.last_record_id
-            
             selector = result[0]
-            link_node = self.imm.append_link_node(selector, peer)
-            
-            record = RouteRecord(record_id, link_node)
-            self.records[k] = record
-            
+            self.imm.append_link_node(selector, peer)
             
         else:
             # case 3: to do 
@@ -664,29 +448,19 @@ class RouteTable(object):
         self.imm.immcfg.execute()
                    
     
-    def rm(self, record_id):
-        
-        record = self.find_record(record_id)
-        
-        if record:
-            self.imm.rm_link_node(record.link_node)
-            
-            for each in self.records.keys():
-                if self.records[each] ==  record:
-                    self.records.pop(each)
-                    break
-        else:
-            print "ERROR: no record found with id " + str(record_id)
+    def rm(self, id):
+        record = self.find_record(id)
+        if not record:
+            print "ERROR: no record found with id " + str(id)
             return
             
         
+        self.imm.rm_link_node(record.link_node)
         self.imm.immcfg.execute()
-        
+       
 
     def modify(self, record_id, field, value):
-        
         record = self.find_record(record_id)
-        
         if not record:
             print "ERROR: record not exit with record id as %d" %(record_id)
             return
@@ -704,68 +478,8 @@ class RouteTable(object):
     
         
 
-def list_route_table(output_format):
-    imm = IMM()
-    imm.load_imm_object()
-    route_table = RouteTable(imm)
-    print route_table.to_string(output_format)    
-
-def add(args):
+class RouteCtr(object):
     
-    imm = IMM()
-    imm.load_imm_object()
-    route_table = RouteTable(imm)
-    
-    app = args.apps
-    if not app:
-        print "please provide apps, e.g. SWx"
-        return 
-    
-    appid = [TO_APP_ID[app],]
-    
-    dest = ast.literal_eval(args.dest)
-    peer = ast.literal_eval(args.peer)
-    
-    
-    if dest[0][0] == '*' or dest[0][0] == '':
-        dest[0][0] = NULL_VALUE
-    
-    print appid, dest, peer
-    
-    route_table.add(appid, dest, peer )
-
-def modify(args):
-    if not args.record:
-        print "please provide the id of route record to be modified"
-        print "use list cmd to print the route table"
-        return 
-
-    imm = IMM()
-    imm.load_imm_object()
-    route_table = RouteTable(imm)
-    
-    peer = ast.literal_eval(args.peer)
-    print peer
-    
-    if args.peer:
-        route_table.modify(int(args.record), 'peer', peer)
-    
-                    
-def rm(args):
-    if not args.record:
-        print "please provide the id of route record to be removed"
-        print "use list cmd to print the route table"
-        return 
-
-    imm = IMM()
-    imm.load_imm_object()
-    route_table = RouteTable(imm)
-    
-    
-    route_table.rm(int(args.record))
-
-if __name__ == "__main__":
-        
     '''
     Example:
         python ./dia_route_ctr.py --cmd list
@@ -773,31 +487,100 @@ if __name__ == "__main__":
         python ./dia_route_ctr.py --cmd modify --record 1 --peer "[['hss1','hss2'],'hss.com']"
         python ./dia_route_ctr.py --cmd rm --record 1
     '''
-    
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--cmd",  choices=('list', 'add', 'rm', 'modify'))
-    
-    # for add cmd
-    parser.add_argument("--apps")
-    parser.add_argument("--dest", type=str)
-    parser.add_argument("--peer", type=str)
-    
-    # for rm cmd
-    parser.add_argument("--record")
-    
-    # for list cmd
-    parser.add_argument("--format", default="TABLE")
-    
-    args = parser.parse_args()
+    def __init__(self):
+        
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--cmd",  choices=('list', 'add', 'rm', 'modify'))
+        
+        # for add cmd
+        parser.add_argument("--apps")
+        parser.add_argument("--dest", type=str)
+        parser.add_argument("--peer", type=str)
+        
+        # for rm cmd
+        parser.add_argument("--record")
+        
+        # for list cmd
+        parser.add_argument("--format", default="TABLE")
+        
+        self.parser = parser
 
-    if args.cmd == "list" :
-        list_route_table(args.format)
-    elif args.cmd == "add" :
-        add(args)
-    elif args.cmd == "rm":
-        rm(args)
-    elif args.cmd == 'modify':
-        modify(args)
-    else:
-        parser.print_help()
+    def execute(self, args=None):
+        
+        if not args:
+            args = sys.argv[1:]
+            
+        args = self.parser.parse_args(args)
+    
+            
+        if args.cmd == "list" :
+            self.load_imm_db()
+            self.list(args.format)
+        elif args.cmd == "add" :
+            self.load_imm_db()
+            self.add(args)
+        elif args.cmd == "rm":
+            self.load_imm_db()
+            self.rm(args)
+        elif args.cmd == 'modify':
+            self.load_imm_db()
+            self.modify(args)
+        else:
+            self.parser.print_help()
+    
+    
+    def load_imm_db(self):
+        imm = IMM()
+        imm.load_imm_object()
+        route_table = RouteTable(imm)
+        self.table = route_table
+
+    
+    def list(self, output_format):
+        print self.table.to_string(output_format)    
+    
+    def add(self, args):
+        app = args.apps
+        if not app:
+            print "please provide apps, e.g. SWx"
+            return 
+        
+        appid = [TO_APP_ID[app],]
+        
+        dest = ast.literal_eval(args.dest)
+        peer = ast.literal_eval(args.peer)
+        
+        
+        if dest[0][0] == '*' or dest[0][0] == '':
+            dest[0][0] = NULL_VALUE
+        
+        print appid, dest, peer
+        
+        self.table.add(appid, dest, peer )
+    
+    def modify(self, args):
+        if not args.record:
+            print "please provide the id of route record to be modified"
+            print "use list cmd to print the route table"
+            return 
+    
+        peer = ast.literal_eval(args.peer)
+        print peer
+        
+        if args.peer:
+            self.table.modify(int(args.record), 'peer', peer)
+        
+                        
+    def rm(self, args):
+        if not args.record:
+            print "please provide the id of route record to be removed"
+            print "use list cmd to print the route table"
+            return 
+        
+        self.table.rm(int(args.record))
+
+if __name__ == "__main__":
+        
+    ctr = TransportCtr()
+    ctr.execute()
     
