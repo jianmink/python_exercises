@@ -3,8 +3,6 @@
 import unittest
 
 import sys
-
-
 sys.path.append("..")
 
 from dia_route_ctr import *
@@ -40,7 +38,7 @@ class TestRouteTable(unittest.TestCase):
         self.assertEqual("otpdiaCons=hss1hss2_hss.com", s.get("peer"))
 #         self.assertEqual(1, s.link_size)
                   
-        print rt.to_string()
+        print rt.to_string("TABLE")
           
                 
     def test_rm_record_with_low_priority(self):
@@ -111,7 +109,6 @@ class TestRouteTable(unittest.TestCase):
                     "immcfg -a destination+=otpdiaDomain=dest_1.1 otpdiaSelector=1"
                     ]
           
-        print rt.to_string()
         self.assertEqual(cmd_list, real.get_cmd_list())
           
          
@@ -134,7 +131,6 @@ class TestRouteTable(unittest.TestCase):
  
          
         rt.add(['16777265',],  ([NULL_VALUE,], 'hss.com'), (['hss1'], 'hss.com'))
-        print rt.to_string()
          
         self.assertEqual(cmd_list,real.get_cmd_list())
          
@@ -182,8 +178,6 @@ class TestRouteTable(unittest.TestCase):
          
         rt.modify(1, 'peer',  (['hss1'], 'hss.com'))
          
-        print rt.to_string()
-         
         self.assertEqual(1, len(rt.records))
         
         self.assertEqual(cmd_list, real.get_cmd_list())
@@ -199,7 +193,6 @@ class TestRouteTable(unittest.TestCase):
         
         rt.modify(1, 'peer',  (['hss1', 'hss2', 'hss3'], 'hss.com'))
          
-        print rt.to_string()
          
         cmd_list = ["immcfg -a host=hss1 otpdiaDomain=hss1hss2_hss.com",
                     "immcfg -a host+=hss2 otpdiaDomain=hss1hss2_hss.com",

@@ -1,0 +1,50 @@
+
+{
+    "plan" : [ 
+        {
+            "start" : "2017-11-01", 
+            "end" :   "2017-11-30",
+            "teams" : [
+                {
+                    "team" : "galaxy",
+                    "assignment" : ["diameter", "radius"]
+                },
+                {
+                    "team" : "saber",
+                    "assignment" : ["dns", "enum"]
+                }
+            ]
+        },
+        
+        {
+            "start" : "2017-10-01",
+            "end" :   "2017-10-31",
+            "teams" : [
+                {
+                    "team" : "galaxy",
+                    "assignment" : ["dns", "enum"]
+                },
+                {
+                    "team" : "saber",
+                    "assignment" : ["dhcp"]
+                }
+            ]
+        },
+        
+        {
+            "start" : "2017-12-01",
+            "end" :   "2017-12-31",
+            "teams" : [
+                {
+                    "team" : "galaxy",
+                    "assignment" : ["ss", "dhcp"]
+                },
+                {
+                    "team" : "saber",
+                    "assignment" : ["enum"]
+                }
+            ]
+        }
+    ]
+}
+

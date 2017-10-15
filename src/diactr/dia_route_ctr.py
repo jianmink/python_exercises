@@ -367,6 +367,18 @@ class RouteTable(object):
                 link_node = link_node.next 
                     
         self.last_record_id = id
+        
+    def sort(self):
+        m = {}
+        for each in self.records:
+            m[each.hash_value] = each
+        
+        s = []
+        for k in sorted(m.keys()):
+            s.append(m[k]) 
+            
+        return s
+        
     
     def hash(self, apps, dest_hosts, dest_realm, peer_host, peer_realm):
         k =  ''.join(apps)
@@ -394,7 +406,7 @@ class RouteTable(object):
         head = ['id', 'app', 'dest', 'peer', 'priority']
         
         table = [] 
-        for record in self.records:
+        for record in self.sort():
             m = record.link_node.selector.matcher
             
             app = ' '.join([TO_APP_NAME[each] for each in m.app_list])
@@ -476,7 +488,25 @@ class RouteTable(object):
 
         self.imm.immcfg.execute()
     
-        
+class ArgumentError(SyntaxError):
+    pass
+
+class MyArgParse(argparse.ArgumentParser): 
+    
+    def __init__(self):
+        super(MyArgParse,self).__init__()
+
+    def error(self, message):
+        """error(message: string)
+
+        Prints a usage message incorporating the message to stderr and
+        exits.
+
+        If you override this in a subclass, it should not return -- it
+        should either exit or raise an exception.
+        """
+        raise ArgumentError(message)
+         
 
 class RouteCtr(object):
     
@@ -489,7 +519,14 @@ class RouteCtr(object):
     '''
     def __init__(self):
         
-        parser = argparse.ArgumentParser()
+        
+        if __name__ == "__main__":
+            parse_class = argparse.ArgumentParser
+        else:
+            parse_class = MyArgParse
+        
+#         parser = argparse.ArgumentParser()
+        parser = parse_class()
         parser.add_argument("--cmd",  choices=('list', 'add', 'rm', 'modify'))
         
         # for add cmd
@@ -509,9 +546,13 @@ class RouteCtr(object):
         
         if not args:
             args = sys.argv[1:]
-            
-        args = self.parser.parse_args(args)
-    
+        
+        try:   
+            args = self.parser.parse_args(args)
+        except ArgumentError as error:
+            print "error: " + repr (error)
+            return 
+        
             
         if args.cmd == "list" :
             self.load_imm_db()
@@ -581,6 +622,6 @@ class RouteCtr(object):
 
 if __name__ == "__main__":
         
-    ctr = TransportCtr()
+    ctr = RouteCtr()
     ctr.execute()
     

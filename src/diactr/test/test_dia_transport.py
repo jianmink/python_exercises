@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import sys
+sys.path.append("../")
 import unittest
 from dia_transport_ctr import *
 
